@@ -10,13 +10,14 @@ main(int argc, char *argv[])
 {
     Chunk chunk;
     initChunk(&chunk);
-    writeChunk(&chunk, OP_RETURN);
 
     // XXX The size of `constant` is larger than 1 byte.
     int constant = addConstant(&chunk, 1.2);
     assert(constant < 256);
-    writeChunk(&chunk, OP_CONSTANT);
-    writeChunk(&chunk, constant);
+    writeChunk(&chunk, OP_CONSTANT, 123);
+    writeChunk(&chunk, constant, 123);
+
+    writeChunk(&chunk, OP_RETURN, 123);
 
     disassembleChunk(&chunk, "test chunk");
     freeChunk(&chunk);
