@@ -8,6 +8,7 @@ SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
 DEPS := $(OBJS:.o=.d)
 
+CFLAGS := -g3 -Wall -Wextra
 CPPFLAGS := -I$(INC_DIR) -MMD -MP
 
 $(BUILD_DIR)/$(BIN): $(OBJS)
