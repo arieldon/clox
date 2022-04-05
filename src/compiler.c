@@ -6,6 +6,10 @@
 #include "compiler.h"
 #include "scanner.h"
 
+#ifdef DEBUG_PRINT_CODE
+#include "debug.h"
+#endif
+
 // Declare as global for ease of use -- no need to pass a pointer around for
 // all functions this way.
 Parser parser;
@@ -105,6 +109,11 @@ static void
 endCompile(void)
 {
     emitReturn();
+#ifdef DEBUG_PRINT_CODE
+    if (!parser.had_error) {
+        disassembleChunk(compiling_chunk, "code");
+    }
+#endif
 }
 
 static void binary(void);
