@@ -10,6 +10,8 @@ typedef enum {
     OP_TRUE,
     OP_FALSE,
     OP_EQUAL,
+    OP_GET_GLOBAL,
+    OP_DEFINE_GLOBAL,
     OP_POP,
     OP_GREATER,
     OP_LESSER,

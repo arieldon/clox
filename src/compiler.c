@@ -139,6 +139,7 @@ static void literal(void);
 static void grouping(void);
 static void number(void);
 static void string(void);
+static void variable(void);
 static void unary(void);
 
 ParseRule rules[] = {
@@ -161,7 +162,7 @@ ParseRule rules[] = {
     [TOKEN_GREATER_EQUAL] = {NULL,     binary, PREC_COMPARISON},
     [TOKEN_LESSER]        = {NULL,     binary, PREC_COMPARISON},
     [TOKEN_LESSER_EQUAL]  = {NULL,     binary, PREC_COMPARISON},
-    [TOKEN_IDENTIFIER]    = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_IDENTIFIER]    = {variable, NULL,   PREC_NONE},
     [TOKEN_STRING]        = {string,   NULL,   PREC_NONE},
     [TOKEN_NUMBER]        = {number,   NULL,   PREC_NONE},
     [TOKEN_AND]           = {NULL,     NULL,   PREC_NONE},
@@ -208,6 +209,24 @@ parsePrecedence(Precedence precedence)
     }
 }
 
+static uint8_t
+identifierConstant(Token *name)
+{
+    return makeConstant(OBJ_VAL(copyString(name->start, name->length)));
+}
+
+static uint8_t
+parseVariable(const char *error_message)
+{
+    consume(TOKEN_IDENTIFIER, error_message);
+    return identifierConstant(&parser.previous);
+}
+
+static void
+defineVariable(uint8_t global)
+{
+    emitBytes(OP_DEFINE_GLOBAL, global);
+}
 
 static void
 expression(void)
@@ -215,6 +234,21 @@ expression(void)
     // Parse lowest precedence level to subsume higher precedence expressions
     // as well.
     parsePrecedence(PREC_ASSIGNMENT);
+}
+
+static void
+varDeclaration(void)
+{
+    uint8_t global = parseVariable("expect variable name");
+
+    if (match(TOKEN_EQUAL)) {
+        expression();
+    } else {
+        emitByte(OP_NIL);
+    }
+    consume(TOKEN_SEMICOLON, "expect ';' after variable declaration");
+
+    defineVariable(global);
 }
 
 static void
@@ -272,7 +306,11 @@ statement(void)
 static void
 declaration(void)
 {
-    statement();
+    if (match(TOKEN_VAR)) {
+        varDeclaration();
+    } else {
+        statement();
+    }
     if (parser.panic_mode) synchronize();
 }
 
@@ -329,6 +367,19 @@ string(void)
 {
     // Copy string directly from lexeme, stripping surrounding quotation marks.
     emitConstant(OBJ_VAL(copyString(parser.previous.start + 1, parser.previous.length - 2)));
+}
+
+static void
+namedVariable(Token name)
+{
+    uint8_t arg = identifierConstant(&name);
+    emitBytes(OP_GET_GLOBAL, arg);
+}
+
+static void
+variable(void)
+{
+    namedVariable(parser.previous);
 }
 
 static void

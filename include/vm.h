@@ -21,6 +21,9 @@ typedef struct {
     // the next item is to be pushed onto the stack.
     Value *stack_top;
 
+    // Store global variables and their corresponding values.
+    Table globals;
+
     // Maintain a table of distinct strings to deduplicate strings and enable
     // their comparison within the VM using the equality operator `==` rather
     // than memcmp(). Although the type is technically a hash table, it's used
