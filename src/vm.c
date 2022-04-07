@@ -142,6 +142,7 @@ run(void)
                 push(BOOL_VAL(valuesEqual(a, b)));
                 break;
             }
+            case OP_POP:      pop(); break;
             case OP_GREATER:  BINARY_OP(BOOL_VAL, >); break;
             case OP_LESSER:   BINARY_OP(BOOL_VAL, <); break;
             case OP_ADD: {

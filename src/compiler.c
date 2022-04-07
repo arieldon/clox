@@ -218,6 +218,14 @@ expression(void)
 }
 
 static void
+expressionStatement(void)
+{
+    expression();
+    consume(TOKEN_SEMICOLON, "expect ';' after expression");
+    emitByte(OP_POP);
+}
+
+static void
 printStatement(void)
 {
     expression();
@@ -230,6 +238,8 @@ statement(void)
 {
     if (match(TOKEN_PRINT)) {
         printStatement();
+    } else {
+        expressionStatement();
     }
 }
 
