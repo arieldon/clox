@@ -234,6 +234,32 @@ printStatement(void)
 }
 
 static void
+synchronize(void)
+{
+    parser.panic_mode = false;
+
+    while (parser.current.type != TOKEN_EOF) {
+        // A semicolon indiciates the end of a statement.
+        if (parser.previous.type == TOKEN_SEMICOLON) return;
+        switch (parser.current.type) {
+            case TOKEN_CLASS:
+            case TOKEN_FUN:
+            case TOKEN_VAR:
+            case TOKEN_FOR:
+            case TOKEN_IF:
+            case TOKEN_WHILE:
+            case TOKEN_PRINT:
+            case TOKEN_RETURN:
+                // These tokens signify the beginning of a new statement.
+                return;
+            default:
+                ;
+        }
+        advance();
+    }
+}
+
+static void
 statement(void)
 {
     if (match(TOKEN_PRINT)) {
@@ -247,6 +273,7 @@ static void
 declaration(void)
 {
     statement();
+    if (parser.panic_mode) synchronize();
 }
 
 static void
