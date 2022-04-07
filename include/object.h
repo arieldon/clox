@@ -24,6 +24,7 @@ struct ObjString {
     Obj obj;
     int length;
     char *chars;
+    uint32_t hash;
 };
 
 // Define as a function rather than a macro because it uses `value` twice. If
