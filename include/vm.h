@@ -2,6 +2,7 @@
 #define VM_H
 
 #include "chunk.h"
+#include "table.h"
 #include "value.h"
 
 #define STACK_MAX 256
@@ -19,6 +20,12 @@ typedef struct {
     // Like the instruction pointer, this pointer points to the address where
     // the next item is to be pushed onto the stack.
     Value *stack_top;
+
+    // Maintain a table of distinct strings to deduplicate strings and enable
+    // their comparison within the VM using the equality operator `==` rather
+    // than memcmp(). Although the type is technically a hash table, it's used
+    // as a set.
+    Table strings;
 
     // Maintain a linked list of objects, which may be dynamically allocated,
     // to free and thus prevent memory leaks.
