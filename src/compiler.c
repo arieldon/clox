@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "compiler.h"
+#include "object.h"
 #include "scanner.h"
 #include "value.h"
 
@@ -117,10 +118,13 @@ endCompile(void)
 #endif
 }
 
+// TODO Reorganize this file to prevent the need to forward declare all of
+// these.
 static void binary(void);
 static void literal(void);
 static void grouping(void);
 static void number(void);
+static void string(void);
 static void unary(void);
 
 ParseRule rules[] = {
@@ -144,7 +148,7 @@ ParseRule rules[] = {
     [TOKEN_LESSER]        = {NULL,     binary, PREC_COMPARISON},
     [TOKEN_LESSER_EQUAL]  = {NULL,     binary, PREC_COMPARISON},
     [TOKEN_IDENTIFIER]    = {NULL,     NULL,   PREC_NONE},
-    [TOKEN_STRING]        = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_STRING]        = {string,   NULL,   PREC_NONE},
     [TOKEN_NUMBER]        = {number,   NULL,   PREC_NONE},
     [TOKEN_AND]           = {NULL,     NULL,   PREC_NONE},
     [TOKEN_CLASS]         = {NULL,     NULL,   PREC_NONE},
@@ -245,6 +249,13 @@ number(void)
 {
     double value = strtod(parser.previous.start, NULL);
     emitConstant(NUMBER_VAL(value));
+}
+
+static void
+string(void)
+{
+    // Copy string directly from lexeme, stripping surrounding quotation marks.
+    emitConstant(OBJ_VAL(copyString(parser.previous.start + 1, parser.previous.length - 2)));
 }
 
 static void

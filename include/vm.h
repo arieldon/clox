@@ -19,6 +19,10 @@ typedef struct {
     // Like the instruction pointer, this pointer points to the address where
     // the next item is to be pushed onto the stack.
     Value *stack_top;
+
+    // Maintain a linked list of objects, which may be dynamically allocated,
+    // to free and thus prevent memory leaks.
+    Obj *objects;
 } VM;
 
 typedef enum {
@@ -26,6 +30,8 @@ typedef enum {
     INTERPRET_COMPILE_ERROR,
     INTERPRET_RUNTIME_ERROR,
 } InterpretResult;
+
+extern VM vm;
 
 void initVM(void);
 void freeVM(void);
