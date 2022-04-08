@@ -323,6 +323,8 @@ declaration(void)
 static void
 binary(bool can_assign)
 {
+    (void)can_assign;
+
     TokenType operator_type = parser.previous.type;
     ParseRule *rule = getRule(operator_type);
     parsePrecedence((Precedence)(rule->precedence + 1));
@@ -345,6 +347,8 @@ binary(bool can_assign)
 static void
 literal(bool can_assign)
 {
+    (void)can_assign;
+
     switch (parser.previous.type) {
         case TOKEN_FALSE: emitByte(OP_FALSE); break;
         case TOKEN_NIL:   emitByte(OP_NIL); break;
@@ -356,6 +360,8 @@ literal(bool can_assign)
 static void
 grouping(bool can_assign)
 {
+    (void)can_assign;
+
     // Assume opening parenthesis was already consumed.
     expression();
     consume(TOKEN_RIGHT_PAREN, "expect ')' after expression");
@@ -364,6 +370,8 @@ grouping(bool can_assign)
 static void
 number(bool can_assign)
 {
+    (void)can_assign;
+
     double value = strtod(parser.previous.start, NULL);
     emitConstant(NUMBER_VAL(value));
 }
@@ -371,6 +379,8 @@ number(bool can_assign)
 static void
 string(bool can_assign)
 {
+    (void)can_assign;
+
     // Copy string directly from lexeme, stripping surrounding quotation marks.
     emitConstant(OBJ_VAL(copyString(parser.previous.start + 1, parser.previous.length - 2)));
 }
@@ -396,6 +406,8 @@ variable(bool can_assign)
 static void
 unary(bool can_assign)
 {
+    (void)can_assign;
+
     TokenType operator_type = parser.previous.type;
 
     // Compile operand.
