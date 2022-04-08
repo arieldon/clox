@@ -114,7 +114,7 @@ run(void)
         push(value_type(a op b)); \
     } while (false)
 
-    /// XXX Upwards of 90% of execution time spent here according to Nystrom.
+    // Upwards of 90% of execution time spent here according to Nystrom.
     for (;;) {
 #ifdef DEBUG_TRACE_EXECUTION
         printf("          ");
@@ -143,6 +143,16 @@ run(void)
                 Value b = pop();
                 Value a = pop();
                 push(BOOL_VAL(valuesEqual(a, b)));
+                break;
+            }
+            case OP_GET_LOCAL: {
+                uint8_t slot = READ_BYTE();
+                push(vm.stack[slot]);
+                break;
+            }
+            case OP_SET_LOCAL: {
+                uint8_t slot = READ_BYTE();
+                vm.stack[slot] = peek(0);
                 break;
             }
             case OP_GET_GLOBAL: {
