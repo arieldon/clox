@@ -100,6 +100,20 @@ emitBytes(uint8_t byte1, uint8_t byte2)
     emitByte(byte2);
 }
 
+static void
+emitLoop(int loop_start)
+{
+    emitByte(OP_LOOP);
+
+    // Calculate instruction offset of loop start; +2 to accont for OP_LOOP
+    // instruction.
+    int offset = compiling_chunk->count - loop_start + 2;
+    if (offset > UINT16_MAX) error("loop body too large");
+
+    emitByte((offset >> 8) & 0xff);
+    emitByte(offset & 0xff);
+}
+
 static int
 emitJump(uint8_t instruction)
 {
@@ -481,6 +495,74 @@ ifStatement(void)
 }
 
 static void
+whileStatement(void)
+{
+    int loop_start = compiling_chunk->count;
+
+    consume(TOKEN_LEFT_PAREN, "expect '(' after 'while'");
+    expression();
+    consume(TOKEN_RIGHT_PAREN, "expect ')' after condition");
+
+    int exit_jump = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);
+    statement();
+    emitLoop(loop_start);
+
+    patchJump(exit_jump);
+    emitByte(OP_POP);
+}
+
+static void
+forStatement(void)
+{
+    // Wrap entire for loop in its own scope to ensure any variable declared in
+    // its clauses is scoped to loop body.
+    beginScope();
+
+    consume(TOKEN_LEFT_PAREN, "expect '(' after 'for'");
+    if (match(TOKEN_SEMICOLON)) {
+        ; // An immediate semicolon indicates the absence of an initializer.
+    } else if (match(TOKEN_VAR)) {
+        varDeclaration();
+    } else {
+        expression();
+    }
+
+    int loop_start = compiling_chunk->count;
+    int exit_jump = -1;
+    if (!match(TOKEN_SEMICOLON)) {
+        expression();
+        consume(TOKEN_SEMICOLON, "expect ';' after loop condition");
+
+        // Jump to end of loop if condition false.
+        exit_jump = emitJump(OP_JUMP_IF_FALSE);
+        emitByte(OP_POP);
+    }
+
+    if (!match(TOKEN_RIGHT_PAREN)) {
+        int body_jump = emitJump(OP_JUMP);
+        int increment_start = compiling_chunk->count;
+        expression();
+        emitByte(OP_POP);
+        consume(TOKEN_RIGHT_PAREN, "expect ')' after for clauses");
+
+        emitLoop(loop_start);
+        loop_start = increment_start;
+        patchJump(body_jump);
+    }
+
+    statement();
+    emitLoop(loop_start);
+
+    if (exit_jump != -1) {
+        patchJump(exit_jump);
+        emitByte(OP_POP);
+    }
+
+    endScope();
+}
+
+static void
 expressionStatement(void)
 {
     expression();
@@ -495,6 +577,10 @@ statement(void)
         printStatement();
     } else if (match(TOKEN_IF)) {
         ifStatement();
+    } else if (match(TOKEN_WHILE)) {
+        whileStatement();
+    } else if (match(TOKEN_FOR)) {
+        forStatement();
     } else if (match(TOKEN_LEFT_BRACE)) {
         beginScope();
         block();
