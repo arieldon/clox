@@ -196,6 +196,8 @@ static void number(bool can_assign);
 static void string(bool can_assign);
 static void variable(bool can_assign);
 static void unary(bool can_assign);
+static void and(bool can_assign);
+static void or(bool can_assign);
 static void declaration(void);
 
 ParseRule rules[] = {
@@ -221,7 +223,7 @@ ParseRule rules[] = {
     [TOKEN_IDENTIFIER]    = {variable, NULL,   PREC_NONE},
     [TOKEN_STRING]        = {string,   NULL,   PREC_NONE},
     [TOKEN_NUMBER]        = {number,   NULL,   PREC_NONE},
-    [TOKEN_AND]           = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_AND]           = {NULL,     and,    PREC_AND},
     [TOKEN_CLASS]         = {NULL,     NULL,   PREC_NONE},
     [TOKEN_ELSE]          = {NULL,     NULL,   PREC_NONE},
     [TOKEN_FALSE]         = {literal,  NULL,   PREC_NONE},
@@ -229,7 +231,7 @@ ParseRule rules[] = {
     [TOKEN_FUN]           = {NULL,     NULL,   PREC_NONE},
     [TOKEN_IF]            = {NULL,     NULL,   PREC_NONE},
     [TOKEN_NIL]           = {literal,  NULL,   PREC_NONE},
-    [TOKEN_OR]            = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_OR]            = {NULL,     or,     PREC_OR},
     [TOKEN_PRINT]         = {NULL,     NULL,   PREC_NONE},
     [TOKEN_RETURN]        = {NULL,     NULL,   PREC_NONE},
     [TOKEN_SUPER]         = {NULL,     NULL,   PREC_NONE},
@@ -360,6 +362,34 @@ defineVariable(uint8_t global)
         return;
     }
     emitBytes(OP_DEFINE_GLOBAL, global);
+}
+
+static void
+and(bool can_assign)
+{
+    (void)can_assign;
+
+    int end_jump = emitJump(OP_JUMP_IF_FALSE);
+
+    emitByte(OP_POP);
+    parsePrecedence(PREC_AND);
+
+    patchJump(end_jump);
+}
+
+static void
+or(bool can_assign)
+{
+    (void)can_assign;
+
+    int else_jump = emitJump(OP_JUMP_IF_FALSE);
+    int end_jump = emitJump(OP_JUMP);
+
+    patchJump(else_jump);
+    emitByte(OP_POP);
+
+    parsePrecedence(PREC_OR);
+    patchJump(end_jump);
 }
 
 static void
