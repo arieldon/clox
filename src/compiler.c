@@ -100,6 +100,18 @@ emitBytes(uint8_t byte1, uint8_t byte2)
     emitByte(byte2);
 }
 
+static int
+emitJump(uint8_t instruction)
+{
+    // Write placeholder operand for jump offset. Once the size of the block is
+    // known, backpatch and modify this placeholder value to proper value to
+    // skip the block.
+    emitByte(instruction);
+    emitByte(0xff);
+    emitByte(0xff);
+    return compiling_chunk->count - 2;
+}
+
 static void
 emitReturn(void)
 {
@@ -121,6 +133,21 @@ static void
 emitConstant(Value value)
 {
     emitBytes(OP_CONSTANT, makeConstant(value));
+}
+
+static void
+patchJump(int offset)
+{
+    // Backpatch and replace operand after emitJump() with proper value to skip
+    // a block.
+    int jump = compiling_chunk->count - offset - 2;
+
+    if (jump > UINT16_MAX) {
+        error("too much code to jump over");
+    }
+
+    compiling_chunk->code[offset] = (jump >> 8) & 0xff;
+    compiling_chunk->code[offset + 1] = jump & 0xff;
 }
 
 static void
@@ -368,14 +395,6 @@ varDeclaration(void)
 }
 
 static void
-expressionStatement(void)
-{
-    expression();
-    consume(TOKEN_SEMICOLON, "expect ';' after expression");
-    emitByte(OP_POP);
-}
-
-static void
 printStatement(void)
 {
     expression();
@@ -409,11 +428,43 @@ synchronize(void)
     }
 }
 
+static void statement(void);
+
+static void
+ifStatement(void)
+{
+    consume(TOKEN_LEFT_PAREN, "expect '(' after if");
+    expression();
+    consume(TOKEN_RIGHT_PAREN, "expect '(' after if");
+
+    int then_jump = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);
+    statement();
+
+    int else_jump = emitJump(OP_JUMP);
+
+    patchJump(then_jump);
+    emitByte(OP_POP);
+
+    if (match(TOKEN_ELSE)) statement();
+    patchJump(else_jump);
+}
+
+static void
+expressionStatement(void)
+{
+    expression();
+    consume(TOKEN_SEMICOLON, "expect ';' after expression");
+    emitByte(OP_POP);
+}
+
 static void
 statement(void)
 {
     if (match(TOKEN_PRINT)) {
         printStatement();
+    } else if (match(TOKEN_IF)) {
+        ifStatement();
     } else if (match(TOKEN_LEFT_BRACE)) {
         beginScope();
         block();
