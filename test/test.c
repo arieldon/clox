@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,6 +22,28 @@ typedef struct Test {
     char path[MAX_PATH_LENGTH];
 } Test;
 
+void
+logerr(char *fmt, ...)
+{
+    // Assume this functions runs directly after previous failed function. If
+    // this assumption holds, it's safe to copy `errno` and call the following
+    // IO functions.
+    int errcode = errno;
+
+    va_list ap;
+    va_start(ap, fmt);
+
+    fprintf(stderr, "error: ");
+    vfprintf(stderr, fmt, ap);
+    if (errcode) {
+        fprintf(stderr, " (%s)\n", strerror(errcode));
+    } else {
+        fprintf(stderr, "\n");
+    }
+
+    va_end(ap);
+}
+
 static void
 append_tests(Test **tests, const char *tests_path)
 {
@@ -28,8 +51,7 @@ append_tests(Test **tests, const char *tests_path)
 
     DIR *tests_dir;
     if ((tests_dir = opendir(tests_path)) == NULL) {
-        perror("opendir");
-        fprintf(stderr, "error: failed to open path '%s'\n", tests_path);
+        logerr("failed to open path '%s'", tests_path);
         exit(EXIT_FAILURE);
     }
 
@@ -57,7 +79,7 @@ append_tests(Test **tests, const char *tests_path)
         if (entry->d_type == DT_REG && strstr(entry->d_name, ".lox") != NULL) {
             Test *test = calloc(1, sizeof(Test));
             if (test == NULL) {
-                fprintf(stderr, "error: failed to allocate memory for test '%s'\n", entry->d_name);
+                logerr("failed to allocate memory for test '%s'", entry->d_name);
                 goto exit;
             }
             for (size_t i = 0; i < MAX_EXPECTATIONS_PER_TEST; ++i) test->expectations[i] = NULL;
@@ -79,9 +101,9 @@ append_tests(Test **tests, const char *tests_path)
         }
     }
 
+    // Check errno for readdir().
     if (errno) {
-        perror("readdir");
-        fprintf(stderr, "error: failed to read a directory entry in directory '%s'\n", tests_path);
+        logerr("failed to read a directory entry in directory '%s'", tests_path);
         errno = 0;
     }
 
@@ -94,8 +116,7 @@ parse_test(Test *test)
 {
     FILE *source = fopen(test->path, "r");
     if (source == NULL) {
-        perror("fopen");
-        fprintf(stderr, "error: failed to open file '%s'\n", test->path);
+        logerr("failed to open file '%s'", test->path);
         return;
     }
 
@@ -105,16 +126,14 @@ parse_test(Test *test)
 
     char *buffer = calloc(file_size + 1, sizeof(char));
     if (buffer == NULL) {
-        perror("calloc");
-        fprintf(stderr, "error: failed to allocate buffer for contents of file '%s'\n", test->path);
+        logerr("failed to allocate buffer for contents of file '%s'", test->path);
         goto free_source;
     }
     buffer[file_size] = '\0';
 
     size_t bytes_read = fread(buffer, sizeof(char), file_size, source);
     if (bytes_read != file_size) {
-        perror("fread");
-        fprintf(stderr, "error: failed to read file '%s'\n", test->path);
+        logerr("failed to read file '%s'", test->path);
         goto free_buffer;
     }
 
@@ -152,16 +171,13 @@ run_test(Test *test)
     const char *tmp_path = "./clox_test_tmp";
     FILE *tmp = fopen(tmp_path, "w+");
     if (tmp == NULL) {
-        perror("fopen");
-        fprintf(stderr, "error: failed to create temporary file '%s' for test '%s'\n",
-                tmp_path, test->path);
+        logerr("failed to create temporary file '%s' for test '%s'", tmp_path, test->path);
         return false;
     }
 
     // Reroute stdout to temporary file.
     if (freopen(tmp_path, "w", stdout) == NULL) {
-        perror("freopen");
-        fprintf(stderr, "error: failed to reroute stdout to temporary file '%s' for test '%s'\n",
+        logerr("failed to reroute stdout to temporary file '%s' for test '%s'",
                 tmp_path, test->path);
         ret = false;
         goto free_tmp;
@@ -170,26 +186,25 @@ run_test(Test *test)
     // Run clox in a child process.
     pid_t child = fork();
     if (child == -1) {
-        fprintf(stderr, "error: failed to spawn child process for interpreter\n");
+        logerr("failed to spawn child process for interpreter");
         ret = false;
         goto restore_stdout;
     } else if (child == 0) {
         char *arguments[] = { "clox", test->path, (char *)0 };
         if (execv(interpreter_path, arguments) == -1) {
-            perror("execv");
-            fprintf(stderr, "error: child process failed to load interpreter at path '%s'\n",
+            logerr("child process failed to load interpreter at path '%s'",
                     interpreter_path);
             exit(EXIT_FAILURE);
         }
     } else {
         int wstatus;
         if (wait(&wstatus) == -1) {
-            perror("wait");
-            fprintf(stderr, "error: parent failed to wait for child process\n");
+            logerr("parent failed to wait for child process");
             ret = false;
             goto restore_stdout;
-        } else if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == EXIT_FAILURE) {
-            fprintf(stderr, "error: child process failed\n");
+        } else if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) != EXIT_SUCCESS) {
+            // Child process outputs error to stderr upon failure.
+            logerr("child process returned a non-zero exit code");
             ret = false;
             goto restore_stdout;
         }
@@ -200,8 +215,7 @@ run_test(Test *test)
         if (test->expectations[i] == NULL) break;
 
         if (fgets(buffer, 64, tmp) == NULL) {
-            perror("fgets");
-            fprintf(stderr, "unable to read a line from temporary file '%s' for test '%s'\n",
+            logerr("unable to read a line from temporary file '%s' for test '%s'",
                     tmp_path, test->path);
         }
 
@@ -210,35 +224,30 @@ run_test(Test *test)
         size_t linelen = linelen_from_file > linelen_from_expect ?
             linelen_from_expect : linelen_from_file;
         if (memcmp(buffer, test->expectations[i], linelen) != 0) {
-            fprintf(stderr, "Expectation: %s; Reality: %s", test->expectations[i], buffer);
+            fprintf(stderr, "\tfailure: expectation: %s | reality: %s", test->expectations[i], buffer);
             return false;
         }
     }
 
     if (errno) {
-        perror("fgets");
-        fprintf(stderr,
-                "error: failed to read line from temporary file '%s' created for test '%s'\n",
+        logerr("failed to read line from temporary file '%s' created for test '%s'",
                 tmp_path, test->path);
         ret = false;
     }
 
 restore_stdout:
     if (freopen("/dev/tty", "w", stdout) == NULL) {
-        perror("freopen");
-        fprintf(stderr, "error: failed to restore stdout after temporarily rerouting it to file '%s' for test '%s'\n",
+        logerr("failed to restore stdout after temporarily rerouting it to file '%s' for test '%s'",
                 tmp_path, test->path);
         exit(EXIT_FAILURE);
     }
 
 free_tmp:
     if (fclose(tmp) == EOF) {
-        perror("fclose");
-        fprintf(stderr, "error: failed to close temporary file '%s' created for test '%s'",
+        logerr("failed to close temporary file '%s' created for test '%s'",
                 tmp_path, test->path);
     } else if (remove(tmp_path) == -1) {
-        perror("remove");
-        fprintf(stderr, "error: failed to remove temporary file '%s' created for test '%s'\n",
+        logerr("failed to remove temporary file '%s' created for test '%s'",
                 tmp_path, test->path);
     }
 
@@ -252,7 +261,7 @@ main(int argc, char *argv[])
     char *program_name = argv[0];
 
     if (argc != 3) {
-        fprintf(stdout, "usage: %s interpreter tests\n", program_name);
+        printf("usage: %s interpreter tests\n", program_name);
         exit(EXIT_FAILURE);
     }
 
