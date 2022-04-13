@@ -1,0 +1,9 @@
+print "string"; // expect: string
+print "string" == "string"; // expect: true
+
+print "this" == "that"; // expect: false
+print "this" != "that"; // expect: true
+
+var x = "this and that";
+print "this and " + "that"; // expect: this and that
+print x == "this and " + "that"; // expect: true

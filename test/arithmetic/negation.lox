@@ -1,0 +1,5 @@
+var a = 1;
+print -a; // expect: -1
+
+var b = 0;
+print -b; // expect: -0

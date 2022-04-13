@@ -1,0 +1,2 @@
+print (4 + 3) * 2; // expect: 14
+print 4 + (3 * 2); // expect: 10

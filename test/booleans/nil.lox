@@ -1,0 +1,4 @@
+print nil; // expect: nil
+print nil == false; // *this is an odd one.* expect: false
+print !nil; // expect: true
+print !nil == true; // expect: true

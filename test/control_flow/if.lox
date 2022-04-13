@@ -1,0 +1,9 @@
+if (true) {
+    print "then branch";
+} // expect: then branch
+
+if (false) {
+    print "then branch";
+} else {
+    print "else branch";
+} // expect: else branch
