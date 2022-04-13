@@ -179,14 +179,6 @@ run_test(Test *test)
         return false;
     }
 
-    // Reroute stdout to temporary file.
-    if (freopen(tmp_path, "w", stdout) == NULL) {
-        logerr("failed to reroute stdout to temporary file '%s' for test '%s'",
-                tmp_path, test->path);
-        ret = false;
-        goto free_tmp;
-    }
-
     // Run clox in a child process.
     pid_t child = fork();
     if (child == -1) {
@@ -194,6 +186,14 @@ run_test(Test *test)
         ret = false;
         goto restore_stdout;
     } else if (child == 0) {
+        // Reroute stdout of child process to temporary file.
+        if (freopen(tmp_path, "w", stdout) == NULL) {
+            logerr("failed to reroute stdout to temporary file '%s' for test '%s'",
+                    tmp_path, test->path);
+            ret = false;
+            goto free_tmp;
+        }
+
         char *arguments[] = { "clox", test->path, (char *)0 };
         if (execv(interpreter_path, arguments) == -1) {
             logerr("child process failed to load interpreter at path '%s'",
