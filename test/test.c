@@ -11,7 +11,7 @@
 #include <unistd.h>
 
 #define MAX_PATH_LENGTH 256
-#define MAX_EXPECTATIONS_PER_TEST 8
+#define MAX_EXPECTATIONS_PER_TEST 16
 
 static char *interpreter_path;
 static char *tests_path;
@@ -150,6 +150,10 @@ parse_test(Test *test)
         memcpy(test->expectations[i], expectation + 8, length);
 
         expectation = eol;
+    }
+
+    if (test->expectations[MAX_EXPECTATIONS_PER_TEST - 1] != NULL && expectation != NULL) {
+        logerr("too many tests, only %d are permitted per file", MAX_EXPECTATIONS_PER_TEST);
     }
 
 free_buffer:
