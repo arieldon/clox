@@ -2,18 +2,31 @@
 #define VM_H
 
 #include "chunk.h"
+#include "object.h"
 #include "table.h"
 #include "value.h"
 
-#define STACK_MAX 256
+#define FRAMES_MAX 64
+#define STACK_MAX  (FRAMES_MAX * UINT8_COUNT)
 
 typedef struct {
-    Chunk *chunk;
+    ObjFunction *function;
 
-    // Use a pointer instead of an index since it's faster to dereference a
-    // pointer than to access a value in an array by index.
-    // The instruction pointer (IP) points to the next instruction to execute.
+    // Because callers store their own instruction pointers, upon return from a
+    // function the VM jumps to the address to which the caller's CallFrame
+    // instruction points.
     uint8_t *ip;
+
+    // Point to stack of values maintained by VM.
+    Value *slots;
+} CallFrame;
+
+typedef struct {
+    // Each CallFrame maintains its own instruction pointer.
+    CallFrame frames[FRAMES_MAX];
+
+    // Track height of CallFrame stack.
+    int frame_count;
 
     Value stack[STACK_MAX];
 

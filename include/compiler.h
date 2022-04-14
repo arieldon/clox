@@ -4,6 +4,7 @@
 #include "chunk.h"
 #include "common.h"
 #include "scanner.h"
+#include "object.h"
 
 typedef struct {
     Token current;
@@ -39,12 +40,20 @@ typedef struct {
     int depth;
 } Local;
 
+typedef enum {
+    TYPE_FUNCTION,
+    TYPE_SCRIPT,
+} FunctionType;
+
 typedef struct {
+    ObjFunction *function;
+    FunctionType type;
+
     Local locals[UINT8_COUNT];
     int local_count;
     int scope_depth;
 } Compiler;
 
-bool compile(const char *source, Chunk *chunk);
+ObjFunction *compile(const char *source);
 
 #endif

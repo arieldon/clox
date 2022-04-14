@@ -17,7 +17,12 @@
 // all functions this way.
 Parser parser;
 Compiler *current = NULL;
-Chunk *compiling_chunk;
+
+static Chunk *
+currentChunk(void)
+{
+    return &current->function->chunk;
+}
 
 static void
 errorAt(Token *token, const char *message)
@@ -90,7 +95,7 @@ match(TokenType type)
 static void
 emitByte(uint8_t byte)
 {
-    writeChunk(compiling_chunk, byte, parser.previous.line);
+    writeChunk(currentChunk(), byte, parser.previous.line);
 }
 
 static void
@@ -107,7 +112,7 @@ emitLoop(int loop_start)
 
     // Calculate instruction offset of loop start; +2 to accont for OP_LOOP
     // instruction.
-    int offset = compiling_chunk->count - loop_start + 2;
+    int offset = currentChunk()->count - loop_start + 2;
     if (offset > UINT16_MAX) error("loop body too large");
 
     emitByte((offset >> 8) & 0xff);
@@ -123,7 +128,7 @@ emitJump(uint8_t instruction)
     emitByte(instruction);
     emitByte(0xff);
     emitByte(0xff);
-    return compiling_chunk->count - 2;
+    return currentChunk()->count - 2;
 }
 
 static void
@@ -135,7 +140,7 @@ emitReturn(void)
 static uint8_t
 makeConstant(Value value)
 {
-    int constant = addConstant(compiling_chunk, value);
+    int constant = addConstant(currentChunk(), value);
     if (constant > UINT8_MAX) {
         error("too many constants in one chunk");
         return 0;
@@ -154,33 +159,48 @@ patchJump(int offset)
 {
     // Backpatch and replace operand after emitJump() with proper value to skip
     // a block.
-    int jump = compiling_chunk->count - offset - 2;
+    int jump = currentChunk()->count - offset - 2;
 
     if (jump > UINT16_MAX) {
         error("too much code to jump over");
     }
 
-    compiling_chunk->code[offset] = (jump >> 8) & 0xff;
-    compiling_chunk->code[offset + 1] = jump & 0xff;
+    currentChunk()->code[offset] = (jump >> 8) & 0xff;
+    currentChunk()->code[offset + 1] = jump & 0xff;
 }
 
 static void
-initCompiler(Compiler *compiler)
+initCompiler(Compiler *compiler, FunctionType type)
 {
+    compiler->function = NULL;
+    compiler->type = type;
     compiler->local_count = 0;
     compiler->scope_depth = 0;
+    compiler->function = newFunction();
     current = compiler;
+
+    // The compiler uses slot zero of the array that tracks local variables and
+    // other temporary values.
+    Local *local = &current->locals[current->local_count++];
+    local->depth = 0;
+    local->name.start = "";
+    local->name.length = 0;
 }
 
-static void
+static ObjFunction *
 endCompile(void)
 {
     emitReturn();
+    ObjFunction *function = current->function;
+
 #ifdef DEBUG_PRINT_CODE
     if (!parser.had_error) {
-        disassembleChunk(compiling_chunk, "code");
+        disassembleChunk(currentChunk(), function->name != NULL
+            ? function->name->chars : "<script>");
     }
 #endif
+
+    return function;
 }
 
 static void
@@ -497,7 +517,7 @@ ifStatement(void)
 static void
 whileStatement(void)
 {
-    int loop_start = compiling_chunk->count;
+    int loop_start = currentChunk()->count;
 
     consume(TOKEN_LEFT_PAREN, "expect '(' after 'while'");
     expression();
@@ -528,7 +548,7 @@ forStatement(void)
         expression();
     }
 
-    int loop_start = compiling_chunk->count;
+    int loop_start = currentChunk()->count;
     int exit_jump = -1;
     if (!match(TOKEN_SEMICOLON)) {
         expression();
@@ -541,7 +561,7 @@ forStatement(void)
 
     if (!match(TOKEN_RIGHT_PAREN)) {
         int body_jump = emitJump(OP_JUMP);
-        int increment_start = compiling_chunk->count;
+        int increment_start = currentChunk()->count;
         expression();
         emitByte(OP_POP);
         consume(TOKEN_RIGHT_PAREN, "expect ')' after for clauses");
@@ -713,13 +733,12 @@ unary(bool can_assign)
     }
 }
 
-bool
-compile(const char *source, Chunk *chunk)
+ObjFunction *
+compile(const char *source)
 {
     initScanner(source);
     Compiler compiler;
-    initCompiler(&compiler);
-    compiling_chunk = chunk;
+    initCompiler(&compiler, TYPE_SCRIPT);
 
     parser.had_error = false;
     parser.panic_mode = false;
@@ -728,7 +747,7 @@ compile(const char *source, Chunk *chunk)
     while (!match(TOKEN_EOF)) {
         declaration();
     }
-    endCompile();
 
-    return !parser.had_error;
+    ObjFunction *function = endCompile();
+    return parser.had_error ? NULL : function;
 }
