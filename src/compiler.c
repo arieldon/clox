@@ -134,6 +134,7 @@ emitJump(uint8_t instruction)
 static void
 emitReturn(void)
 {
+    emitByte(OP_NIL);
     emitByte(OP_RETURN);
 }
 
@@ -539,6 +540,22 @@ printStatement(void)
 }
 
 static void
+returnStatement(void)
+{
+    if (current->type == TYPE_SCRIPT) {
+        error("cannot return from top-level code");
+    }
+
+    if (match(TOKEN_SEMICOLON)) {
+        emitReturn();
+    } else {
+        expression();
+        consume(TOKEN_SEMICOLON, "expect ';' after return value");
+        emitByte(OP_RETURN);
+    }
+}
+
+static void
 synchronize(void)
 {
     parser.panic_mode = false;
@@ -669,6 +686,8 @@ statement(void)
         printStatement();
     } else if (match(TOKEN_IF)) {
         ifStatement();
+    } else if (match(TOKEN_RETURN)) {
+        returnStatement();
     } else if (match(TOKEN_WHILE)) {
         whileStatement();
     } else if (match(TOKEN_FOR)) {
