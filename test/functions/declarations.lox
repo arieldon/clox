@@ -1,0 +1,5 @@
+fun f() {
+    print "x";
+}
+
+print f; // expect: <fn f>

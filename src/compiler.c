@@ -172,12 +172,18 @@ patchJump(int offset)
 static void
 initCompiler(Compiler *compiler, FunctionType type)
 {
+    compiler->enclosing = current;
     compiler->function = NULL;
     compiler->type = type;
     compiler->local_count = 0;
     compiler->scope_depth = 0;
     compiler->function = newFunction();
+
     current = compiler;
+    if (type != TYPE_SCRIPT) {
+        current->function->name = copyString(parser.previous.start,
+                parser.previous.length);
+    }
 
     // The compiler uses slot zero of the array that tracks local variables and
     // other temporary values.
@@ -188,7 +194,7 @@ initCompiler(Compiler *compiler, FunctionType type)
 }
 
 static ObjFunction *
-endCompile(void)
+endCompiler(void)
 {
     emitReturn();
     ObjFunction *function = current->function;
@@ -200,6 +206,10 @@ endCompile(void)
     }
 #endif
 
+    // Each function introduces a new compiler. The end of one compiler's
+    // compilation signifies the need to pop the enclosing compiler from the
+    // stack and use it instead.
+    current = current->enclosing;
     return function;
 }
 
@@ -383,6 +393,7 @@ parseVariable(const char *error_message)
 static void
 markInitialized(void)
 {
+    if (current->scope_depth == 0) return;
     current->locals[current->local_count - 1].depth = current->scope_depth;
 }
 
@@ -441,6 +452,49 @@ block(void)
         declaration();
     }
     consume(TOKEN_RIGHT_BRACE, "expect '}' after block");
+}
+
+static void
+function(FunctionType type)
+{
+    Compiler compiler;
+    initCompiler(&compiler, type);
+    beginScope();
+
+    consume(TOKEN_LEFT_PAREN, "expect '(' after function name");
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            ++current->function->arity;
+            if (current->function->arity > 255) {
+                errorAtCurrent("cannot have more than 255 parameters");
+            }
+            uint8_t constant = parseVariable("expect parameter name");
+            defineVariable(constant);
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_PAREN, "expect ')' after parameters");
+    consume(TOKEN_LEFT_BRACE, "expect '{' before function body");
+    block();
+
+    // No need for endScope() since endCompiler() effectively terminates the
+    // compiler.
+    ObjFunction *function = endCompiler();
+    emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
+}
+
+static void
+funDeclaration(void)
+{
+    uint8_t global = parseVariable("expect function name");
+
+    // Mark the function initialized after compiling its name and before
+    // compiling its body to allow a reference to the function in its own body.
+    // The programmer cannot call the function until the compiler defines it
+    // fully, so this behavior proves safe.
+    markInitialized();
+
+    function(TYPE_FUNCTION);
+    defineVariable(global);
 }
 
 static void
@@ -613,7 +667,9 @@ statement(void)
 static void
 declaration(void)
 {
-    if (match(TOKEN_VAR)) {
+    if (match(TOKEN_FUN)) {
+        funDeclaration();
+    } else if (match(TOKEN_VAR)) {
         varDeclaration();
     } else {
         statement();
@@ -748,6 +804,6 @@ compile(const char *source)
         declaration();
     }
 
-    ObjFunction *function = endCompile();
+    ObjFunction *function = endCompiler();
     return parser.had_error ? NULL : function;
 }
