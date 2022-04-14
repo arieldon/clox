@@ -234,6 +234,7 @@ endScope(void)
 // TODO Reorganize this file to prevent the need to forward declare all of
 // these.
 static void binary(bool can_assign);
+static void call(bool can_assign);
 static void literal(bool can_assign);
 static void grouping(bool can_assign);
 static void number(bool can_assign);
@@ -245,7 +246,7 @@ static void or(bool can_assign);
 static void declaration(void);
 
 ParseRule rules[] = {
-    [TOKEN_LEFT_PAREN]    = {grouping, NULL,   PREC_NONE},
+    [TOKEN_LEFT_PAREN]    = {grouping, call,   PREC_CALL},
     [TOKEN_RIGHT_PAREN]   = {NULL,     NULL,   PREC_NONE},
     [TOKEN_LEFT_BRACE]    = {NULL,     NULL,   PREC_NONE},
     [TOKEN_RIGHT_BRACE]   = {NULL,     NULL,   PREC_NONE},
@@ -443,6 +444,23 @@ expression(void)
     // Parse lowest precedence level to subsume higher precedence expressions
     // as well.
     parsePrecedence(PREC_ASSIGNMENT);
+}
+
+static uint8_t
+argumentList(void)
+{
+    uint8_t arg_count = 0;
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            expression();
+            if (arg_count == 255) {
+                error("cannot have more than 255 arguments");
+            }
+            ++arg_count;
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_PAREN, "expect ')' after arguments");
+    return arg_count;
 }
 
 static void
@@ -699,6 +717,15 @@ binary(bool can_assign)
         case TOKEN_SLASH:   emitByte(OP_DIVIDE); break;
         default:            return; // Unreachable.
     }
+}
+
+static void
+call(bool can_assign)
+{
+    (void)can_assign;
+
+    uint8_t arg_count = argumentList();
+    emitBytes(OP_CALL, arg_count);
 }
 
 static void
