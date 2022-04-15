@@ -10,7 +10,7 @@
 #define STACK_MAX  (FRAMES_MAX * UINT8_COUNT)
 
 typedef struct {
-    ObjFunction *function;
+    ObjClosure *closure;
 
     // Because callers store their own instruction pointers, upon return from a
     // function the VM jumps to the address to which the caller's CallFrame
@@ -42,6 +42,8 @@ typedef struct {
     // than memcmp(). Although the type is technically a hash table, it's used
     // as a set.
     Table strings;
+
+    ObjUpvalue *open_upvalues;
 
     // Maintain a linked list of objects, which may be dynamically allocated,
     // to free and thus prevent memory leaks.

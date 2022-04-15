@@ -190,6 +190,7 @@ initCompiler(Compiler *compiler, FunctionType type)
     // other temporary values.
     Local *local = &current->locals[current->local_count++];
     local->depth = 0;
+    local->is_captured = false;
     local->name.start = "";
     local->name.length = 0;
 }
@@ -227,7 +228,11 @@ endScope(void)
 
     while (current->local_count > 0 &&
            current->locals[current->local_count - 1].depth > current->scope_depth) {
-        emitByte(OP_POP);
+        if (current->locals[current->local_count - 1].is_captured) {
+            emitByte(OP_CLOSE_UPVALUE);
+        } else {
+            emitByte(OP_POP);
+        }
         --current->local_count;
     }
 }
@@ -347,6 +352,49 @@ resolveLocal(Compiler *compiler, Token *name)
     return -1;
 }
 
+static int
+addUpvalue(Compiler *compiler, uint8_t index, bool is_local)
+{
+    int upvalue_count = compiler->function->upvalue_count;
+
+    // If previously stored, return existing index of an upvalue.
+    for (int i = 0; i < upvalue_count; ++i) {
+        Upvalue *upvalue = &compiler->upvalues[i];
+        if (upvalue->index == index && upvalue->is_local == is_local) {
+            return i;
+        }
+    }
+
+    if (upvalue_count == UINT8_COUNT) {
+        error("Too many closure variables in function");
+        return 0;
+    }
+
+    // If not previously stored, append the upvalue and return its index.
+    compiler->upvalues[upvalue_count].is_local = is_local;
+    compiler->upvalues[upvalue_count].index = index;
+    return compiler->function->upvalue_count++;
+}
+
+static int
+resolveUpvalue(Compiler *compiler, Token *name)
+{
+    if (compiler->enclosing == NULL) return -1;
+
+    int local = resolveLocal(compiler->enclosing, name);
+    if (local != -1) {
+        compiler->enclosing->locals[local].is_captured = true;
+        return addUpvalue(compiler, (uint8_t)local, true);
+    }
+
+    int upvalue = resolveUpvalue(compiler->enclosing, name);
+    if (upvalue != -1) {
+        return addUpvalue(compiler, (uint8_t)upvalue, false);
+    }
+
+    return -1;
+}
+
 static void
 addLocal(Token name)
 {
@@ -357,6 +405,7 @@ addLocal(Token name)
     Local *local = &current->locals[current->local_count++];
     local->name = name;
     local->depth = -1;
+    local->is_captured = false;
 }
 
 static void
@@ -498,7 +547,12 @@ function(FunctionType type)
     // No need for endScope() since endCompiler() effectively terminates the
     // compiler.
     ObjFunction *function = endCompiler();
-    emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
+    emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
+
+    for (int i = 0; i < function->upvalue_count; ++i) {
+        emitByte(compiler.upvalues[i].is_local ? 1 : 0);
+        emitByte(compiler.upvalues[i].index);
+    }
 }
 
 static void
@@ -797,6 +851,9 @@ namedVariable(Token name, bool can_assign)
     if (arg != -1) {
         get_op = OP_GET_LOCAL;
         set_op = OP_SET_LOCAL;
+    } else if ((arg = resolveUpvalue(current, &name)) != -1) {
+        get_op = OP_GET_UPVALUE;
+        set_op = OP_SET_UPVALUE;
     } else {
         arg = identifierConstant(&name);
         get_op = OP_GET_GLOBAL;

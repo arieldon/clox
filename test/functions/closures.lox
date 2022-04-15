@@ -1,0 +1,45 @@
+var x = "global";
+fun outer() {
+    var x = "outside";
+    fun inner() {
+        print x;
+    }
+    inner();
+}
+outer(); // expect: outside
+
+
+fun f() {
+    var x = "value";
+
+    fun g() {
+        fun h() {
+            print x;
+        }
+
+        print "create inner closure";
+        return h;
+    }
+
+    print "return from outer";
+    return g;
+}
+
+var mid = f();
+var in = mid();
+in();
+
+// expect: return from outer
+// expect: create inner closure
+// expect: value
+
+
+fun a() {
+    var x = nil;
+    fun inner() {
+        x = true;
+    }
+    inner();
+    print x;
+}
+a(); // expect: true
