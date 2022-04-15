@@ -1,0 +1,5 @@
+fun sum(a, b, c) {
+    return a + b + c;
+}
+
+print sum(0, 1, 2); // expect: 3
