@@ -2,6 +2,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "common.h"
 #include "compiler.h"
@@ -14,6 +15,14 @@
 // around a pointer everywhere. Only a single VM is required or even desirable
 // in this case anyway.
 VM vm;
+
+static Value
+clockNative(int arg_count, Value *args)
+{
+    (void)arg_count;
+    (void)args;
+    return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+}
 
 static void
 resetStack(void)
@@ -52,6 +61,19 @@ runtimeError(const char *format, ...)
     resetStack();
 }
 
+static void
+defineNative(const char *name, NativeFn function)
+{
+    // Since both copyString() and newNative() allocate memory dynamically,
+    // push and pop the values to prevent the garbage collector from
+    // inadvertently cleaning them.
+    push(OBJ_VAL(copyString(name, (int)strlen(name))));
+    push(OBJ_VAL(newNative(function)));
+    tableSet(&vm.globals, AS_STRING(vm.stack[0]), vm.stack[1]);
+    pop();
+    pop();
+}
+
 void
 initVM(void)
 {
@@ -59,6 +81,8 @@ initVM(void)
     initTable(&vm.globals);
     initTable(&vm.strings);
     vm.objects = NULL;
+
+    defineNative("clock", clockNative);
 }
 
 void
@@ -118,6 +142,17 @@ callValue(Value callee, int arg_count)
         switch (OBJ_TYPE(callee)) {
             case OBJ_FUNCTION:
                 return call(AS_FUNCTION(callee), arg_count);
+            case OBJ_NATIVE: {
+                NativeFn native = AS_NATIVE(callee);
+
+                // Let C execute the function and push the result onto the
+                // stack.
+                Value result = native(arg_count, vm.stack_top - arg_count);
+                vm.stack_top -= arg_count + 1;
+                push(result);
+
+                return true;
+            }
             default:
                 break; // This case indicates a non-callable object type.
         }
