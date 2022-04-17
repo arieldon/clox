@@ -7,19 +7,27 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #define MAX_PATH_LENGTH 256
 #define MAX_EXPECTATIONS_PER_TEST 16
+#define MAX_EXPECTATION_LENGTH 32
+#define MAX_BUFFER_LENGTH 512
 
-static char *interpreter_path;
-static char *tests_path;
+#define EXPECTATION_STR "expect: "
+#define EXPECTATION_STR_LENGTH 8
+
+static char buffer[MAX_BUFFER_LENGTH] = {0};
+static char *interpreter_path = NULL;
+static char *tests_path = NULL;
 
 typedef struct Test {
     struct Test *next;
-    char *expectations[MAX_EXPECTATIONS_PER_TEST];
     char path[MAX_PATH_LENGTH];
+    char expectations[MAX_EXPECTATIONS_PER_TEST][MAX_EXPECTATION_LENGTH];
 } Test;
 
 void
@@ -60,10 +68,7 @@ append_tests(Test **tests, const char *tests_path)
     while ((entry = readdir(tests_dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
 
-        if (entry->d_type == DT_DIR) {
-            recursed = true;
-
-            // Prepend name of current directory to filename.
+        if (!recursed) {
             size_t dirlen = strlen(tests_path);
             size_t namelen = strlen(entry->d_name);
             assert(dirlen + namelen + 1 <= 256);
@@ -71,9 +76,16 @@ append_tests(Test **tests, const char *tests_path)
             memcpy(entry->d_name + dirlen, entry->d_name, namelen);
             memcpy(entry->d_name, tests_path, dirlen);
             entry->d_name[dirlen + namelen] = 0;
+        }
 
+        // Only support one layer of recursion.
+        if (!recursed && entry->d_type == DT_DIR) {
+            recursed = true;
             append_tests(tests, entry->d_name);
             recursed = false;
+        }
+        if (recursed && entry->d_type == DT_DIR) {
+            logerr("ignore nested directory '%s'", entry->d_name);
         }
 
         if (entry->d_type == DT_REG && strstr(entry->d_name, ".lox") != NULL) {
@@ -82,7 +94,6 @@ append_tests(Test **tests, const char *tests_path)
                 logerr("failed to allocate memory for test '%s'", entry->d_name);
                 goto exit;
             }
-            for (size_t i = 0; i < MAX_EXPECTATIONS_PER_TEST; ++i) test->expectations[i] = NULL;
 
             if (recursed) {
                 size_t parentlen = strlen(tests_path);
@@ -111,42 +122,48 @@ exit:
     closedir(tests_dir);
 }
 
-static void
+static bool
 parse_test(Test *test)
 {
-    FILE *source = fopen(test->path, "r");
-    if (source == NULL) {
+    bool ret = true;
+
+    int sourcefd = open(test->path, O_RDONLY);
+    if (sourcefd == -1) {
         logerr("failed to open file '%s'", test->path);
-        return;
+        return false;
     }
 
-    fseek(source, 0, SEEK_END);
-    size_t file_size = ftell(source);
-    rewind(source);
-
-    char *buffer = calloc(file_size + 1, sizeof(char));
-    if (buffer == NULL) {
-        logerr("failed to allocate buffer for contents of file '%s'", test->path);
+    struct stat sb = {0};
+    if (fstat(sourcefd, &sb) == -1) {
+        logerr("failed to obtain information about file '%s'", test->path);
+        ret = false;
         goto free_source;
     }
-    buffer[file_size] = '\0';
 
-    size_t bytes_read = fread(buffer, sizeof(char), file_size, source);
-    if (bytes_read != file_size) {
+    char *file_buffer = calloc(sb.st_size + 1, sizeof(char));
+    if (file_buffer == NULL) {
+        logerr("failed to allocate file_buffer for contents of file '%s'", test->path);
+        ret = false;
+        goto free_source;
+    }
+    file_buffer[sb.st_size] = '\0';
+
+    ssize_t read_bytes = read(sourcefd, file_buffer, sb.st_size);
+    if (read_bytes == -1) {
         logerr("failed to read file '%s'", test->path);
-        goto free_buffer;
+        goto free_file_buffer;
     }
 
-    char *eol, *expectation = buffer;
+    char *eol = NULL;
+    char *expectation = file_buffer;
     for (size_t i = 0; i < MAX_EXPECTATIONS_PER_TEST; ++i) {
         expectation = strstr(expectation, "expect: ");
         if (expectation == NULL) break;
         eol = strchr(expectation, '\n');
 
-        // 8 represents the length of "expect: ".
+        // Subtract 8 to remove "expect: " from string.
         size_t length = eol - expectation - 8;
-        test->expectations[i] = calloc(length + 1, sizeof(char));
-        test->expectations[i][length] = 0;
+        assert(length < MAX_EXPECTATION_LENGTH);
         memcpy(test->expectations[i], expectation + 8, length);
 
         expectation = eol;
@@ -156,105 +173,104 @@ parse_test(Test *test)
         logerr("too many tests, only %d are permitted per file", MAX_EXPECTATIONS_PER_TEST);
     }
 
-free_buffer:
-    free(buffer);
+free_file_buffer:
+    free(file_buffer);
 free_source:
-    fclose(source);
+    close(sourcefd);
+    return ret;
 }
 
 static bool
 run_test(Test *test)
 {
-    // TODO Test if reroute using a pipe to a buffer faster than temporary file.
-
+    int fds[2];
     bool ret = true;
+
     printf("run_test: %s\n", test->path);
-
-    parse_test(test);
-
-    const char *tmp_path = "./clox_test_tmp";
-    FILE *tmp = fopen(tmp_path, "w+");
-    if (tmp == NULL) {
-        logerr("failed to create temporary file '%s' for test '%s'", tmp_path, test->path);
+    if (!parse_test(test)) {
+        logerr("failed to parse test '%s'", test->path);
         return false;
     }
 
+    if (pipe(fds) == -1) {
+        logerr("failed to create pipe for test '%s' to read and write between processes",
+                test->path);
+        return false;
+    }
+
+    int readfd = fds[0];
+    int writefd = fds[1];
+
     // Run clox in a child process.
-    pid_t child = fork();
-    if (child == -1) {
-        logerr("failed to spawn child process for interpreter");
+    switch (fork()) {
+        case -1:
+            logerr("failed to spawn child process to interpret test '%s'", test->path);
+            ret = false;
+            goto exit;
+        case 0:
+            // Child does not read.
+            close(readfd);
+
+            // Route stdout to pipe.
+            dup2(writefd, STDOUT_FILENO);
+
+            // Start interpreter.
+            char *arguments[] = { "clox", test->path, NULL };
+            if (execv(interpreter_path, arguments) == -1) {
+                logerr("child process failed to load interpreter at path '%s'",
+                        interpreter_path);
+                exit(EXIT_FAILURE);
+            }
+        default:
+            // Parent does not write.
+            close(writefd);
+
+            // Wait for child.
+            int wstatus;
+            if (wait(&wstatus) == -1) {
+                logerr("parent failed to wait for child process");
+                ret = false;
+                goto exit;
+            } else if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) != EXIT_SUCCESS) {
+                // Child process outputs error to stderr upon failure.
+                logerr("child process returned a non-zero exit code");
+                ret = false;
+                goto exit;
+            };
+    }
+
+    memset(buffer, '\0', MAX_BUFFER_LENGTH);
+    ssize_t read_bytes = read(readfd, buffer, MAX_BUFFER_LENGTH);
+    if (read_bytes == -1) {
+        logerr("failed to read buffer for test '%s'", test->path);
         ret = false;
-        goto restore_stdout;
-    } else if (child == 0) {
-        // Reroute stdout of child process to temporary file.
-        if (freopen(tmp_path, "w", stdout) == NULL) {
-            logerr("failed to reroute stdout to temporary file '%s' for test '%s'",
-                    tmp_path, test->path);
+        goto exit;
+    }
+
+    char *eol = NULL;
+    char *actual = buffer;
+    for (size_t i = 0; i < MAX_EXPECTATIONS_PER_TEST; ++i) {
+        if (test->expectations[i][0] == 0) break;
+        if ((eol = strchr(actual, '\n')) == NULL) break;
+        *eol = '\0';
+
+        size_t expectation_length = strlen(test->expectations[i]);
+        size_t actual_length = strlen(actual);
+        size_t length = expectation_length < actual_length ?
+            expectation_length : actual_length;
+        if (memcmp(test->expectations[i], actual, length) != 0) {
+            fprintf(stderr, "\t(failure) expectation: %s | actual: %s\n",
+                    test->expectations[i], actual);
             ret = false;
-            goto free_tmp;
+            goto exit;
         }
 
-        char *arguments[] = { "clox", test->path, (char *)0 };
-        if (execv(interpreter_path, arguments) == -1) {
-            logerr("child process failed to load interpreter at path '%s'",
-                    interpreter_path);
-            exit(EXIT_FAILURE);
-        }
-    } else {
-        int wstatus;
-        if (wait(&wstatus) == -1) {
-            logerr("parent failed to wait for child process");
-            ret = false;
-            goto restore_stdout;
-        } else if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) != EXIT_SUCCESS) {
-            // Child process outputs error to stderr upon failure.
-            logerr("child process returned a non-zero exit code");
-            ret = false;
-            goto restore_stdout;
-        }
+        actual = eol + 1;
+        assert(actual < buffer + MAX_BUFFER_LENGTH);
     }
 
-    char buffer[64] = {0};
-    for (int i = 0; i < MAX_EXPECTATIONS_PER_TEST; ++i) {
-        if (test->expectations[i] == NULL) break;
-
-        if (fgets(buffer, 64, tmp) == NULL) {
-            logerr("unable to read a line from temporary file '%s' for test '%s'",
-                    tmp_path, test->path);
-        }
-
-        size_t linelen_from_file = strlen(buffer);
-        size_t linelen_from_expect = strlen(test->expectations[i]);
-        size_t linelen = linelen_from_file > linelen_from_expect ?
-            linelen_from_expect : linelen_from_file;
-        if (memcmp(buffer, test->expectations[i], linelen) != 0) {
-            fprintf(stderr, "\tfailure: expectation: %s | reality: %s", test->expectations[i], buffer);
-            return false;
-        }
-    }
-
-    if (errno) {
-        logerr("failed to read line from temporary file '%s' created for test '%s'",
-                tmp_path, test->path);
-        ret = false;
-    }
-
-restore_stdout:
-    if (freopen("/dev/tty", "w", stdout) == NULL) {
-        logerr("failed to restore stdout after temporarily rerouting it to file '%s' for test '%s'",
-                tmp_path, test->path);
-        exit(EXIT_FAILURE);
-    }
-
-free_tmp:
-    if (fclose(tmp) == EOF) {
-        logerr("failed to close temporary file '%s' created for test '%s'",
-                tmp_path, test->path);
-    } else if (remove(tmp_path) == -1) {
-        logerr("failed to remove temporary file '%s' created for test '%s'",
-                tmp_path, test->path);
-    }
-
+exit:
+    close(readfd);
     return ret;
 }
 
@@ -283,12 +299,16 @@ main(int argc, char *argv[])
     int total_tests = 0;
     int tests_passed = 0;
 
+    Test *prev_test = NULL;
     Test *test = tests;
     while (test) {
+        prev_test = test;
         tests_passed += run_test(test);
         test = test->next;
         ++total_tests;
+        free(prev_test);
     }
+
 
     // Output final results.
     printf("%d of %d tests passed.\n", tests_passed, total_tests);
