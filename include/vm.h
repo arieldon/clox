@@ -48,6 +48,14 @@ typedef struct {
     // Maintain a linked list of objects, which may be dynamically allocated,
     // to free and thus prevent memory leaks.
     Obj *objects;
+
+    // The stack of gray objects represents the working set of objects marked
+    // to be kept during garbage collection because they're reachable. The
+    // references within these gray objects are yet to be traversed though, so
+    // they're not marked black.
+    int gray_count;
+    int gray_capacity;
+    Obj **gray_stack;
 } VM;
 
 typedef enum {
