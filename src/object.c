@@ -67,8 +67,12 @@ allocateString(char *chars, int length, uint32_t hash)
     string->chars = chars;
     string->hash = hash;
 
-    // Internalize each string in the VM.
+    // Internalize each string in the VM. Push and pop to prevent the garbage
+    // collector from sweeping it in case the tables allocates more memory and
+    // triggers a cycle of garbage collection.
+    push(OBJ_VAL(string));
     tableSet(&vm.strings, string, NIL_VAL);
+    pop();
 
     return string;
 }

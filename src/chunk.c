@@ -2,6 +2,7 @@
 
 #include "chunk.h"
 #include "memory.h"
+#include "vm.h"
 
 void
 initChunk(Chunk *chunk)
@@ -39,6 +40,10 @@ writeChunk(Chunk *chunk, uint8_t byte, int line)
 int
 addConstant(Chunk *chunk, Value value)
 {
+    // Push and pop to prevent the garbage collector from sweeping the value in
+    // case of reallocate().
+    push(value);
     writeValueArray(&chunk->constants, value);
+    pop();
     return chunk->constants.count - 1;
 }
