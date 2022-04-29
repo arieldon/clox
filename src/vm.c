@@ -81,6 +81,9 @@ initVM(void)
 
     initTable(&vm.globals);
     initTable(&vm.strings);
+
+    vm.bytes_allocated = 0;
+    vm.next_gc = 1024 * 1024;
     vm.objects = NULL;
 
     defineNative("clock", clockNative);

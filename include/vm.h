@@ -45,6 +45,11 @@ typedef struct {
 
     ObjUpvalue *open_upvalues;
 
+    // Track the total number of bytes currently allocated by the VM and the
+    // threshold to trigger the next collection.
+    size_t bytes_allocated;
+    size_t next_gc;
+
     // Maintain a linked list of objects, which may be dynamically allocated,
     // to free and thus prevent memory leaks.
     Obj *objects;
