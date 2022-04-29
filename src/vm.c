@@ -144,6 +144,11 @@ callValue(Value callee, int arg_count)
 {
     if (IS_OBJ(callee)) {
         switch (OBJ_TYPE(callee)) {
+            case OBJ_CLASS: {
+                ObjClass *class = AS_CLASS(callee);
+                vm.stack_top[-arg_count - 1] = OBJ_VAL(newInstance(class));
+                return true;
+            }
             case OBJ_CLOSURE:
                 return call(AS_CLOSURE(callee), arg_count);
             case OBJ_NATIVE:
@@ -408,6 +413,9 @@ run(void)
                 frame = &vm.frames[vm.frame_count - 1];
                 break;
             }
+            case OP_CLASS:
+                push(OBJ_VAL(newClass(READ_STRING())));
+                break;
         }
     }
 

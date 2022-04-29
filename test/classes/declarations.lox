@@ -1,0 +1,2 @@
+class Class {}
+print Class; // expect: "Class"

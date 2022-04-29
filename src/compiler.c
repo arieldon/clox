@@ -557,6 +557,20 @@ function(FunctionType type)
 }
 
 static void
+classDeclaration(void)
+{
+    consume(TOKEN_IDENTIFIER, "expect class name");
+    uint8_t name_constant = identifierConstant(&parser.previous);
+    declareVariable();
+
+    emitBytes(OP_CLASS, name_constant);
+    defineVariable(name_constant);
+
+    consume(TOKEN_LEFT_BRACE, "expect '{' before class body");
+    consume(TOKEN_RIGHT_BRACE, "expect '}' after class body");
+}
+
+static void
 funDeclaration(void)
 {
     uint8_t global = parseVariable("expect function name");
@@ -759,7 +773,9 @@ statement(void)
 static void
 declaration(void)
 {
-    if (match(TOKEN_FUN)) {
+    if (match(TOKEN_CLASS)) {
+        classDeclaration();
+    } else if (match(TOKEN_FUN)) {
         funDeclaration();
     } else if (match(TOKEN_VAR)) {
         varDeclaration();
