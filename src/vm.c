@@ -145,7 +145,8 @@ callValue(Value callee, int arg_count)
     if (IS_OBJ(callee)) {
         switch (OBJ_TYPE(callee)) {
             case OBJ_BOUND_METHOD: {
-                ObjBoundMethod *method = AS_BOUND_METHOD(callee);
+                ObjBoundMethod *bound = AS_BOUND_METHOD(callee);
+                vm.stack_top[-arg_count - 1] = bound->receiver;
                 return call(bound->method, arg_count);
             }
             case OBJ_CLASS: {
@@ -174,7 +175,7 @@ bindMethod(ObjClass *class, ObjString *name)
         return false;
     }
 
-    ObjBoundMethod *method = newBoundMethod(peek(0), AS_CLOSURE(method));
+    ObjBoundMethod *bound = newBoundMethod(peek(0), AS_CLOSURE(method));
     pop();
     push(OBJ_VAL(bound));
     return true;

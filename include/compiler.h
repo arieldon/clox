@@ -48,6 +48,7 @@ typedef struct {
 
 typedef enum {
     TYPE_FUNCTION,
+    TYPE_METHOD,
     TYPE_SCRIPT,
 } FunctionType;
 
@@ -62,6 +63,10 @@ typedef struct Compiler {
     Upvalue upvalues[UINT8_COUNT];
     int scope_depth;
 } Compiler;
+
+typedef struct ClassCompiler {
+    struct ClassCompiler *enclosing;
+} ClassCompiler;
 
 ObjFunction *compile(const char *source);
 void markCompilerRoots(void);

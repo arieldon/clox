@@ -1,0 +1,29 @@
+class SomeClass {
+    output() {
+        print this.something;
+    }
+
+    method(a, b) {
+        print "a: " + a + ", b: " + b;
+    }
+}
+
+var some_class = SomeClass();
+some_class.something = "something";
+
+var output_method = some_class.output;
+output_method(); // expect: something
+
+some_class.method("some", "class"); // expect: a: some, b: class
+
+
+class Nested {
+    method() {
+        fun function() {
+            print this;
+        }
+        function();
+    }
+}
+
+Nested().method(); // expect: Nested instance
