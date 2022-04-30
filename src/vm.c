@@ -144,6 +144,10 @@ callValue(Value callee, int arg_count)
 {
     if (IS_OBJ(callee)) {
         switch (OBJ_TYPE(callee)) {
+            case OBJ_BOUND_METHOD: {
+                ObjBoundMethod *method = AS_BOUND_METHOD(callee);
+                return call(bound->method, arg_count);
+            }
             case OBJ_CLASS: {
                 ObjClass *class = AS_CLASS(callee);
                 vm.stack_top[-arg_count - 1] = OBJ_VAL(newInstance(class));
@@ -159,6 +163,21 @@ callValue(Value callee, int arg_count)
     }
     runtimeError("can only call functions and classes");
     return false;
+}
+
+static bool
+bindMethod(ObjClass *class, ObjString *name)
+{
+    Value method;
+    if (!tableGet(&class->methods, name, &method)) {
+        runtimeError("undefined property '%s'", name->chars);
+        return false;
+    }
+
+    ObjBoundMethod *method = newBoundMethod(peek(0), AS_CLOSURE(method));
+    pop();
+    push(OBJ_VAL(bound));
+    return true;
 }
 
 static ObjUpvalue *
@@ -197,6 +216,15 @@ closeUpvalues(Value *last)
         upvalue->location = &upvalue->closed;
         vm.open_upvalues = upvalue->next;
     }
+}
+
+static void
+defineMethod(ObjString *name)
+{
+    Value method = peek(0);
+    ObjClass *class = AS_CLASS(peek(1));
+    tableSet(&class->methods, name, method);
+    pop();
 }
 
 static bool
@@ -296,8 +324,10 @@ run(void)
                     break;
                 }
 
-                runtimeError("undefined property '%s'", name->chars);
-                return INTERPRET_RUNTIME_ERROR;
+                if (!bindMethod(instance->class, name)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                break;
             }
             case OP_SET_PROPERTY: {
                 if (!IS_INSTANCE(peek(1))) {
@@ -447,6 +477,9 @@ run(void)
             }
             case OP_CLASS:
                 push(OBJ_VAL(newClass(READ_STRING())));
+                break;
+            case OP_METHOD:
+                defineMethod(READ_STRING());
                 break;
         }
     }
