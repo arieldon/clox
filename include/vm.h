@@ -43,6 +43,9 @@ typedef struct {
     // as a set.
     Table strings;
 
+    // Name of the init method for classes interned for speed.
+    ObjString *init_string;
+
     ObjUpvalue *open_upvalues;
 
     // Track the total number of bytes currently allocated by the VM and the

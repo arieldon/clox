@@ -82,6 +82,9 @@ initVM(void)
     initTable(&vm.globals);
     initTable(&vm.strings);
 
+    vm.init_string = NULL;
+    vm.init_string = copyString("init", 4);
+
     vm.bytes_allocated = 0;
     vm.next_gc = 1024 * 1024;
     vm.objects = NULL;
@@ -94,6 +97,7 @@ freeVM(void)
 {
     freeTable(&vm.globals);
     freeTable(&vm.strings);
+    vm.init_string = NULL;
     freeObjects();
 }
 
@@ -152,6 +156,13 @@ callValue(Value callee, int arg_count)
             case OBJ_CLASS: {
                 ObjClass *class = AS_CLASS(callee);
                 vm.stack_top[-arg_count - 1] = OBJ_VAL(newInstance(class));
+                Value initializer;
+                if (tableGet(&class->methods, vm.init_string, &initializer)) {
+                    return call(AS_CLOSURE(initializer), arg_count);
+                } else if (arg_count != 0) {
+                    runtimeError("expected 0 arguments but got %d", arg_count);
+                    return false;
+                }
                 return true;
             }
             case OBJ_CLOSURE:

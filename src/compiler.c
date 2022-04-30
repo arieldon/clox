@@ -136,7 +136,11 @@ emitJump(uint8_t instruction)
 static void
 emitReturn(void)
 {
-    emitByte(OP_NIL);
+    if (current->type == TYPE_INITIALIZER) {
+        emitBytes(OP_GET_LOCAL, 0);
+    } else {
+        emitByte(OP_NIL);
+    }
     emitByte(OP_RETURN);
 }
 
@@ -572,6 +576,10 @@ method(void)
     uint8_t constant = identifierConstant(&parser.previous);
 
     FunctionType type = TYPE_METHOD;
+    if (parser.previous.length == 4 && memcmp(parser.previous.start, "init", 4) == 0) {
+        type = TYPE_INITIALIZER;
+    }
+
     function(type);
     emitBytes(OP_METHOD, constant);
 }
@@ -650,6 +658,10 @@ returnStatement(void)
     if (match(TOKEN_SEMICOLON)) {
         emitReturn();
     } else {
+        if (current->type == TYPE_INITIALIZER) {
+            error("cannot return a value from an initiailzer");
+        }
+
         expression();
         consume(TOKEN_SEMICOLON, "expect ';' after return value");
         emitByte(OP_RETURN);

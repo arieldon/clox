@@ -164,6 +164,9 @@ markRoots(void)
 
     // The VM allocates memory for literals and constants during compilation.
     markCompilerRoots();
+
+    // Treat name of init method as root to keep it.
+    markObject((Obj *)vm.init_string);
 }
 
 static void
