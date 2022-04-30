@@ -178,6 +178,39 @@ callValue(Value callee, int arg_count)
 }
 
 static bool
+invokeFromClass(ObjClass *class, ObjString *name, int arg_count)
+{
+    // Combine logic of OP_GET_OPERTY and OP_CALL instructions.
+    Value method;
+    if (!tableGet(&class->methods, name, &method)) {
+        runtimeError("undefined preperty '%s'", name->chars);
+        return false;
+    }
+    return call(AS_CLOSURE(method), arg_count);
+}
+
+static bool
+invoke(ObjString *name, int arg_count)
+{
+    Value receiver = peek(arg_count);
+
+    if (!IS_INSTANCE(receiver)) {
+        runtimeError("only instances have methods");
+        return false;
+    }
+
+    ObjInstance *instance = AS_INSTANCE(receiver);
+
+    Value value;
+    if (tableGet(&instance->fields, name, &value)) {
+        vm.stack_top[-arg_count - 1] = value;
+        return callValue(value, arg_count);
+    }
+
+    return invokeFromClass(instance->class, name, arg_count);
+}
+
+static bool
 bindMethod(ObjClass *class, ObjString *name)
 {
     Value method;
@@ -449,6 +482,15 @@ run(void)
             case OP_CALL: {
                 int arg_count = READ_BYTE();
                 if (!callValue(peek(arg_count), arg_count)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frame_count - 1];
+                break;
+            }
+            case OP_INVOKE: {
+                ObjString *method = READ_STRING();
+                int arg_count = READ_BYTE();
+                if (!invoke(method, arg_count)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 frame = &vm.frames[vm.frame_count - 1];

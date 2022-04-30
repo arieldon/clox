@@ -871,6 +871,10 @@ dot(bool can_assign)
     if (can_assign && match(TOKEN_EQUAL)) {
         expression();
         emitBytes(OP_SET_PROPERTY, name);
+    } else if (match(TOKEN_LEFT_PAREN)) {
+        uint8_t arg_count = argumentList();
+        emitBytes(OP_INVOKE, name);
+        emitByte(arg_count);
     } else {
         emitBytes(OP_GET_PROPERTY, name);
     }
