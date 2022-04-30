@@ -1,2 +1,9 @@
-class Class {}
-print Class();  // expect: Class instance
+class Donkey {}
+print Donkey();  // expect: Donkey instance
+
+var donkey = Donkey();
+
+donkey.tail = true;
+print donkey.tail;  // expect: true
+
+print donkey.legs = 4; // expect: 4

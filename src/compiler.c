@@ -242,6 +242,7 @@ endScope(void)
 // these.
 static void binary(bool can_assign);
 static void call(bool can_assign);
+static void dot(bool can_assign);
 static void literal(bool can_assign);
 static void grouping(bool can_assign);
 static void number(bool can_assign);
@@ -258,7 +259,7 @@ ParseRule rules[] = {
     [TOKEN_LEFT_BRACE]    = {NULL,     NULL,   PREC_NONE},
     [TOKEN_RIGHT_BRACE]   = {NULL,     NULL,   PREC_NONE},
     [TOKEN_COMMA]         = {NULL,     NULL,   PREC_NONE},
-    [TOKEN_DOT]           = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_DOT]           = {NULL,     dot,    PREC_CALL},
     [TOKEN_MINUS]         = {unary,    binary, PREC_TERM},
     [TOKEN_PLUS]          = {NULL,     binary, PREC_TERM},
     [TOKEN_SEMICOLON]     = {NULL,     NULL,   PREC_NONE},
@@ -816,6 +817,20 @@ call(bool can_assign)
 
     uint8_t arg_count = argumentList();
     emitBytes(OP_CALL, arg_count);
+}
+
+static void
+dot(bool can_assign)
+{
+    consume(TOKEN_IDENTIFIER, "expect property name after '.'");
+    uint8_t name = identifierConstant(&parser.previous);
+
+    if (can_assign && match(TOKEN_EQUAL)) {
+        expression();
+        emitBytes(OP_SET_PROPERTY, name);
+    } else {
+        emitBytes(OP_GET_PROPERTY, name);
+    }
 }
 
 static void

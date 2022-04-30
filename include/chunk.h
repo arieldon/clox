@@ -10,6 +10,8 @@ typedef enum {
     OP_TRUE,
     OP_FALSE,
     OP_EQUAL,
+    OP_GET_PROPERTY,
+    OP_SET_PROPERTY,
     OP_GET_UPVALUE,
     OP_SET_UPVALUE,
     OP_GET_LOCAL,
