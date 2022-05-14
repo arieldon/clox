@@ -259,6 +259,7 @@ static void number(bool can_assign);
 static void string(bool can_assign);
 static void variable(bool can_assign);
 static void namedVariable(Token name, bool can_assign);
+static void super(bool can_assign);
 static void this(bool can_assign);
 static void unary(bool can_assign);
 static void and(bool can_assign);
@@ -299,7 +300,7 @@ ParseRule rules[] = {
     [TOKEN_OR]            = {NULL,     or,     PREC_OR},
     [TOKEN_PRINT]         = {NULL,     NULL,   PREC_NONE},
     [TOKEN_RETURN]        = {NULL,     NULL,   PREC_NONE},
-    [TOKEN_SUPER]         = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_SUPER]         = {super,    NULL,   PREC_NONE},
     [TOKEN_THIS]          = {this,     NULL,   PREC_NONE},
     [TOKEN_TRUE]          = {literal,  NULL,   PREC_NONE},
     [TOKEN_VAR]           = {NULL,     NULL,   PREC_NONE},
@@ -584,6 +585,15 @@ method(void)
     emitBytes(OP_METHOD, constant);
 }
 
+static Token
+synethitcToken(const char *text)
+{
+    return (Token){
+        .start = text,
+        .length = strlen(text),
+    };
+}
+
 static void
 classDeclaration(void)
 {
@@ -595,9 +605,31 @@ classDeclaration(void)
     emitBytes(OP_CLASS, name_constant);
     defineVariable(name_constant);
 
-    ClassCompiler class_compiler;
-    class_compiler.enclosing = current_class;
+    ClassCompiler class_compiler = {
+        .enclosing = current_class,
+        .has_superclass = false,
+    };
     current_class = &class_compiler;
+
+    if (match(TOKEN_LESSER)) {
+        consume(TOKEN_IDENTIFIER, "expect superclass name");
+        variable(false);
+
+        if (identifiersEqual(&class_name, &parser.previous)) {
+            error("a class cannot inherit itself");
+        }
+
+        // Create a new scope to prevent "super" variables from colliding by
+        // providing a different local slot for each class in the case that 2+
+        // classes are declared in the same scope.
+        beginScope();
+        addLocal(synethitcToken("super"));
+        defineVariable(0);
+
+        namedVariable(class_name, false);
+        emitByte(OP_INHERIT);
+        class_compiler.has_superclass = true;
+    }
 
     namedVariable(class_name, false);
     consume(TOKEN_LEFT_BRACE, "expect '{' before class body");
@@ -606,6 +638,10 @@ classDeclaration(void)
     }
     consume(TOKEN_RIGHT_BRACE, "expect '}' after class body");
     emitByte(OP_POP);
+
+    if (class_compiler.has_superclass) {
+        endScope();
+    }
 
     current_class = current_class->enclosing;
 }
@@ -951,6 +987,34 @@ static void
 variable(bool can_assign)
 {
     namedVariable(parser.previous, can_assign);
+}
+
+static void
+super(bool can_assign)
+{
+    (void)can_assign;
+
+    if (current_class == NULL) {
+        error("cannot use 'super' outside of a class");
+    } else if (!current_class->has_superclass) {
+        error("cannot use 'super' in a class without a superclass");
+    }
+
+    consume(TOKEN_DOT, "exect '.' after 'super'");
+    consume(TOKEN_IDENTIFIER, "expect superclass method name");
+    uint8_t name = identifierConstant(&parser.previous);
+
+    namedVariable(synethitcToken("this"), false);
+    namedVariable(synethitcToken("super"), false);
+    if (match(TOKEN_LEFT_PAREN)) {
+        uint8_t arg_count = argumentList();
+        namedVariable(synethitcToken("super"), false);
+        emitBytes(OP_SUPER_INVOKE, name);
+        emitByte(arg_count);
+    } else {
+        namedVariable(synethitcToken("super"), false);
+        emitBytes(OP_GET_SUPER, name);
+    }
 }
 
 static void

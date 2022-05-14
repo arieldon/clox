@@ -353,6 +353,15 @@ run(void)
                 push(BOOL_VAL(valuesEqual(a, b)));
                 break;
             }
+            case OP_GET_SUPER: {
+                ObjString *name = READ_STRING();
+                ObjClass *superclass = AS_CLASS(pop());
+
+                if (!bindMethod(superclass, name)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                break;
+            }
             case OP_GET_PROPERTY: {
                 if (!IS_INSTANCE(peek(0))) {
                     runtimeError("only instances have properties");
@@ -496,6 +505,16 @@ run(void)
                 frame = &vm.frames[vm.frame_count - 1];
                 break;
             }
+            case OP_SUPER_INVOKE: {
+                ObjString *method = READ_STRING();
+                int arg_count = READ_BYTE();
+                ObjClass *superclass = AS_CLASS(pop());
+                if (!invokeFromClass(superclass, method, arg_count)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frame_count - 1];
+                break;
+            }
             case OP_CLOSURE: {
                 ObjFunction *function = AS_FUNCTION(READ_CONSTANT());
                 ObjClosure *closure = newClosure(function);
@@ -532,6 +551,21 @@ run(void)
             case OP_CLASS:
                 push(OBJ_VAL(newClass(READ_STRING())));
                 break;
+            case OP_INHERIT: {
+                // Copy methods from inherited class directly into inheriting
+                // class. This is feasible because Lox doesn't allow addition
+                // or deletion to the set of methods of a class after
+                // declaration.
+                Value superclass = peek(1);
+                if (!IS_CLASS(superclass)) {
+                    runtimeError("superclass must be a class");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjClass *subclass = AS_CLASS(peek(0));
+                tableAddAll(&AS_CLASS(superclass)->methods, &subclass->methods);
+                pop();
+                break;
+            }
             case OP_METHOD:
                 defineMethod(READ_STRING());
                 break;
