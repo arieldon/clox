@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -26,7 +27,14 @@ freeTable(Table *table)
 static Entry *
 findEntry(Entry *entries, int capacity, ObjString *key)
 {
-    uint32_t index = key->hash % capacity;
+    // `capacity` must be a power of 2 to replace the original modulo operation
+    // with the bit twiddling trick below.
+    assert((capacity & (capacity - 1)) == 0);
+
+    // In binary, subtracting a power of two by 1 yields a series of 1 bits.
+    // Use this series of 1 bits as a mask to replace modulo operation n % m
+    // since they're equivalent when m is a power of 2.
+    uint32_t index = key->hash & (capacity - 1);
     Entry *tombstone = NULL;
 
     // While the loop appears infinite, it will eventually terminate when it
@@ -47,7 +55,9 @@ findEntry(Entry *entries, int capacity, ObjString *key)
             // `==` because they are the same string at the same address.
             return entry;
         }
-        index = (index + 1) % capacity;
+
+        // Use the same bit twiddle as above.
+        index = (index + 1) & (capacity - 1);
     }
 }
 
@@ -139,7 +149,9 @@ tableFindString(Table *table, const char *chars, int length, uint32_t hash)
 {
     if (table->count == 0) return NULL;
 
-    uint32_t index = hash % table->capacity;
+    // Use the same bit twiddle described in findEntry() to optimize search by
+    // replacing modulo with a bit mask.
+    uint32_t index = hash & (table->capacity - 1);
     for (;;) {
         Entry *entry = &table->entries[index];
         if (entry->key == NULL) {
@@ -149,7 +161,7 @@ tableFindString(Table *table, const char *chars, int length, uint32_t hash)
                    memcmp(entry->key->chars, chars, length) == 0) {
             return entry->key;
         }
-        index = (index + 1) % table->capacity;
+        index = (index + 1) & (table->capacity - 1);
     }
 }
 
