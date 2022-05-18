@@ -14,7 +14,7 @@
 
 #define MAX_PATH_LENGTH 256
 #define MAX_EXPECTATIONS_PER_TEST 16
-#define MAX_EXPECTATION_LENGTH 32
+#define MAX_EXPECTATION_LENGTH 48
 #define MAX_BUFFER_LENGTH 512
 
 #define EXPECTATION_STR "expect: "
@@ -211,8 +211,9 @@ run_test(Test *test)
             // Child does not read.
             close(readfd);
 
-            // Route stdout to pipe.
+            // Route stdout and stderr to pipe.
             dup2(writefd, STDOUT_FILENO);
+            dup2(writefd, STDERR_FILENO);
 
             // Start interpreter.
             char *arguments[] = { "clox", test->path, NULL };
@@ -231,9 +232,9 @@ run_test(Test *test)
                 logerr("parent failed to wait for child process");
                 ret = false;
                 goto exit;
-            } else if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) != EXIT_SUCCESS) {
+            } else if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == EXIT_FAILURE) {
                 // Child process outputs error to stderr upon failure.
-                logerr("child process returned a non-zero exit code");
+                logerr("child process returned an unexpected exit code %d", WEXITSTATUS(wstatus));
                 ret = false;
                 goto exit;
             };
