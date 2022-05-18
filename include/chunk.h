@@ -45,16 +45,31 @@ typedef enum {
 } OpCode;
 
 typedef struct {
+    int instruction_offset; // Store offset into chunk of first instruction of line.
+    int line_number;
+} Line;
+
+// A chunk consists of a contiguous series of bytecode instructions and their
+// constants. It also maps line numbers to instructions in a run-length encoded
+// format for debug and error messages.
+
+typedef struct {
+    // Store code and data.
     int count;
     int capacity;
     uint8_t *code;
-    int *lines;
     ValueArray constants;
+
+    // Track line of each instruction for error and debugging messages.
+    int line_count;
+    int line_capacity;
+    Line *lines;
 } Chunk;
 
 void initChunk(Chunk *chunk);
 void freeChunk(Chunk *chunk);
 void writeChunk(Chunk *chunk, uint8_t byte, int line);
 int addConstant(Chunk *chunk, Value value);
+int getLine(Chunk *chunk, int instruction);
 
 #endif
