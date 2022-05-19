@@ -1,0 +1,2 @@
+var v = v; // expect: undefined variable 'v'
+           // expect: [line 1] in script
