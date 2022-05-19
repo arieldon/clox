@@ -661,7 +661,7 @@ ifStatement(void)
 {
     consume(TOKEN_LEFT_PAREN, "expect '(' after if");
     expression();
-    consume(TOKEN_RIGHT_PAREN, "expect '(' after if");
+    consume(TOKEN_RIGHT_PAREN, "expect ')' after if");
 
     int then_jump = emitJump(OP_JUMP_IF_FALSE);
     emitByte(OP_POP);
