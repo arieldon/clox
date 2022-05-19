@@ -226,6 +226,8 @@ scanToken(void)
         case '+': return makeToken(TOKEN_PLUS);
         case '/': return makeToken(TOKEN_SLASH);
         case '*': return makeToken(TOKEN_STAR);
+        case '?': return makeToken(TOKEN_QMARK);
+        case ':': return makeToken(TOKEN_COLON);
         case '!': return makeToken(match('=') ? TOKEN_BANG_EQUAL : TOKEN_BANG);
         case '=': return makeToken(match('=') ? TOKEN_EQUAL_EQUAL : TOKEN_EQUAL);
         case '<': return makeToken(match('=') ? TOKEN_LESSER_EQUAL : TOKEN_LESSER);
