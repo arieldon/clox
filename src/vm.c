@@ -167,8 +167,13 @@ callValue(Value callee, int arg_count)
             }
             case OBJ_CLOSURE:
                 return call(AS_CLOSURE(callee), arg_count);
-            case OBJ_NATIVE:
-                return call(AS_CLOSURE(callee), arg_count);
+            case OBJ_NATIVE: {
+                NativeFn native = AS_NATIVE(callee);
+                Value result = native(arg_count, vm.stack_top - arg_count);
+                vm.stack_top -= arg_count + 1;
+                push(result);
+                return true;
+            }
             default:
                 break; // This case indicates a non-callable object type.
         }
