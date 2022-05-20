@@ -1,0 +1,23 @@
+var i = 0;
+while (i < 4) {
+    i = i + 1;
+    if (i == 3) {
+        continue;
+    }
+    print i;
+}
+
+// expect: 1
+// expect: 2
+// expect: 4
+
+for (var j = 0; j < 4; j = j + 1) {
+    if (j == 2) {
+        continue;
+    }
+    print j;
+}
+
+// expect: 0
+// expect: 1
+// expect: 3

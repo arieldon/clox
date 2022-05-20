@@ -26,6 +26,8 @@ static void variable(bool can_assign);
 Parser parser;
 Compiler *current = NULL;
 ClassCompiler *current_class = NULL;
+int nearest_loop_start = -1;
+int nearest_scope_depth = 0;
 
 static Chunk *
 currentChunk(void)
@@ -679,7 +681,8 @@ ifStatement(void)
 static void
 whileStatement(void)
 {
-    int loop_start = currentChunk()->count;
+    int enclosing_loop_start = nearest_loop_start;
+    int loop_start = nearest_loop_start = currentChunk()->count;
 
     consume(TOKEN_LEFT_PAREN, "expect '(' after 'while'");
     expression();
@@ -692,6 +695,8 @@ whileStatement(void)
 
     patchJump(exit_jump);
     emitByte(OP_POP);
+
+    nearest_loop_start = enclosing_loop_start;
 }
 
 static void
@@ -733,6 +738,11 @@ forStatement(void)
         patchJump(body_jump);
     }
 
+    int enclosing_loop_start = nearest_loop_start;
+    nearest_loop_start = loop_start;
+    int enclosing_scope_depth = nearest_scope_depth;
+    nearest_scope_depth = current->scope_depth;
+
     statement();
     emitLoop(loop_start);
 
@@ -741,7 +751,26 @@ forStatement(void)
         emitByte(OP_POP);
     }
 
+    nearest_loop_start = enclosing_loop_start;
+    nearest_scope_depth = enclosing_scope_depth;
     endScope();
+}
+
+static void
+continueStatement(void)
+{
+    if (nearest_loop_start == -1) {
+        error("cannot 'continue' from outside of a loop");
+        return;
+    }
+
+    consume(TOKEN_SEMICOLON, "expect ';' after 'continue'");
+
+    for (int i = current->local_count - 1;
+            i >= 0 && current->locals[i].depth > nearest_scope_depth; --i) {
+        emitByte(OP_POP);
+    }
+    emitLoop(nearest_loop_start);
 }
 
 static void
@@ -765,6 +794,8 @@ statement(void)
         whileStatement();
     } else if (match(TOKEN_FOR)) {
         forStatement();
+    } else if (match(TOKEN_CONTINUE)) {
+        continueStatement();
     } else if (match(TOKEN_LEFT_BRACE)) {
         beginScope();
         block();
@@ -1022,6 +1053,7 @@ ParseRule rules[] = {
     [TOKEN_TRUE]          = {literal,  NULL,    PREC_NONE},
     [TOKEN_VAR]           = {NULL,     NULL,    PREC_NONE},
     [TOKEN_WHILE]         = {NULL,     NULL,    PREC_NONE},
+    [TOKEN_CONTINUE]      = {NULL,     NULL,    PREC_NONE},
     [TOKEN_ERROR]         = {NULL,     NULL,    PREC_NONE},
     [TOKEN_EOF]           = {NULL,     NULL,    PREC_NONE},
 };
