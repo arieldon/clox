@@ -58,13 +58,13 @@ runtimeError(const char *format, ...)
 }
 
 static void
-defineNative(const char *name, NativeFn function)
+defineNative(const char *name, NativeFn function, int arity)
 {
     // Since both copyString() and newNative() allocate memory dynamically,
     // push and pop the values to prevent the garbage collector from
     // inadvertently cleaning them.
     push(OBJ_VAL(copyString(name, (int)strlen(name))));
-    push(OBJ_VAL(newNative(function)));
+    push(OBJ_VAL(newNative(function, arity)));
     tableSet(&vm.globals, AS_STRING(vm.stack[0]), vm.stack[1]);
     pop();
     pop();
@@ -89,7 +89,7 @@ initVM(void)
     vm.next_gc = 1024 * 1024;
     vm.objects = NULL;
 
-    defineNative("clock", clockNative);
+    defineNative("clock", clockNative, 0);
 }
 
 void
@@ -168,8 +168,12 @@ callValue(Value callee, int arg_count)
             case OBJ_CLOSURE:
                 return call(AS_CLOSURE(callee), arg_count);
             case OBJ_NATIVE: {
-                NativeFn native = AS_NATIVE(callee);
-                Value result = native(arg_count, vm.stack_top - arg_count);
+                ObjNative *native = AS_NATIVE(callee);
+                if (native->arity != arg_count) {
+                    runtimeError("expected %d arguments but got %d", native->arity, arg_count);
+                    return false;
+                }
+                Value result = native->function(arg_count, vm.stack_top - arg_count);
                 vm.stack_top -= arg_count + 1;
                 push(result);
                 return true;

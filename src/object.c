@@ -80,9 +80,10 @@ newInstance(ObjClass *class)
 }
 
 ObjNative *
-newNative(NativeFn function)
+newNative(NativeFn function, int arity)
 {
     ObjNative *native = ALLOCATE_OBJ(ObjNative, OBJ_NATIVE);
+    native->arity = arity;
     native->function = function;
     return native;
 }

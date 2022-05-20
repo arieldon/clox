@@ -21,7 +21,7 @@
 #define AS_CLOSURE(value)       ((ObjClosure *)AS_OBJ(value))
 #define AS_FUNCTION(value)      ((ObjFunction *)AS_OBJ(value))
 #define AS_INSTANCE(value)      ((ObjInstance *)AS_OBJ(value))
-#define AS_NATIVE(value)        (((ObjNative *)AS_OBJ(value))->function)
+#define AS_NATIVE(value)        ((ObjNative *)AS_OBJ(value))
 #define AS_STRING(value)        ((ObjString *)AS_OBJ(value))
 #define AS_CSTRING(value)       (((ObjString *)AS_OBJ(value))->chars)
 
@@ -58,6 +58,7 @@ typedef Value (*NativeFn)(int arg_count, Value *args);
 // as a result.
 typedef struct {
     Obj obj;
+    int arity;
     NativeFn function;
 } ObjNative;
 
@@ -105,7 +106,7 @@ ObjClass *newClass(ObjString *name);
 ObjInstance *newInstance(ObjClass *class);
 ObjClosure *newClosure(ObjFunction *function);
 ObjFunction *newFunction(void);
-ObjNative *newNative(NativeFn function);
+ObjNative *newNative(NativeFn function, int arity);
 
 // Define as a function rather than a macro because it uses `value` twice. If
 // the argument passed as `value` produces side effects, it doesn't execute
