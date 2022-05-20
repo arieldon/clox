@@ -27,6 +27,7 @@ Parser parser;
 Compiler *current = NULL;
 ClassCompiler *current_class = NULL;
 int nearest_loop_start = -1;
+int nearest_loop_end = -1;
 int nearest_scope_depth = 0;
 
 static Chunk *
@@ -681,6 +682,7 @@ ifStatement(void)
 static void
 whileStatement(void)
 {
+    int enclosing_loop_end = nearest_loop_end;
     int enclosing_loop_start = nearest_loop_start;
     int loop_start = nearest_loop_start = currentChunk()->count;
 
@@ -689,6 +691,7 @@ whileStatement(void)
     consume(TOKEN_RIGHT_PAREN, "expect ')' after condition");
 
     int exit_jump = emitJump(OP_JUMP_IF_FALSE);
+    nearest_loop_end = exit_jump - 1;
     emitByte(OP_POP);
     statement();
     emitLoop(loop_start);
@@ -697,6 +700,7 @@ whileStatement(void)
     emitByte(OP_POP);
 
     nearest_loop_start = enclosing_loop_start;
+    nearest_loop_end = enclosing_loop_end;
 }
 
 static void
@@ -740,6 +744,8 @@ forStatement(void)
 
     int enclosing_loop_start = nearest_loop_start;
     nearest_loop_start = loop_start;
+    int enclosing_loop_end = nearest_loop_end;
+    nearest_loop_end = exit_jump - 1;
     int enclosing_scope_depth = nearest_scope_depth;
     nearest_scope_depth = current->scope_depth;
 
@@ -751,9 +757,24 @@ forStatement(void)
         emitByte(OP_POP);
     }
 
+    nearest_loop_end = enclosing_loop_end;
     nearest_loop_start = enclosing_loop_start;
     nearest_scope_depth = enclosing_scope_depth;
     endScope();
+}
+
+static void
+breakStatement(void)
+{
+    if (nearest_loop_start == -1) {
+        error("cannot 'break' from outside of a loop");
+        return;
+    }
+
+    consume(TOKEN_SEMICOLON, "expect ';' after 'continue'");
+
+    emitByte(OP_FALSE);
+    emitLoop(nearest_loop_end);
 }
 
 static void
@@ -794,6 +815,8 @@ statement(void)
         whileStatement();
     } else if (match(TOKEN_FOR)) {
         forStatement();
+    } else if (match(TOKEN_BREAK)) {
+        breakStatement();
     } else if (match(TOKEN_CONTINUE)) {
         continueStatement();
     } else if (match(TOKEN_LEFT_BRACE)) {
@@ -1053,6 +1076,7 @@ ParseRule rules[] = {
     [TOKEN_TRUE]          = {literal,  NULL,    PREC_NONE},
     [TOKEN_VAR]           = {NULL,     NULL,    PREC_NONE},
     [TOKEN_WHILE]         = {NULL,     NULL,    PREC_NONE},
+    [TOKEN_BREAK]         = {NULL,     NULL,    PREC_NONE},
     [TOKEN_CONTINUE]      = {NULL,     NULL,    PREC_NONE},
     [TOKEN_ERROR]         = {NULL,     NULL,    PREC_NONE},
     [TOKEN_EOF]           = {NULL,     NULL,    PREC_NONE},
