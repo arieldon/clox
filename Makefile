@@ -28,6 +28,9 @@ $(BUILD_DIR)/%.c.o: %.c
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: clean
+install: $(BUILD_DIR)/$(BIN)
+	install -m755 $(BUILD_DIR)/$(BIN) /usr/local/bin
+
+.PHONY: clean install
 
 -include $(DEPS)
