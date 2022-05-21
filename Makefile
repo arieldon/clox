@@ -8,9 +8,15 @@ SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
 DEPS := $(OBJS:.o=.d)
 
-LDFLAGS += -fsanitize=address
-CFLAGS := -g3 -Wall -Wextra
+CFLAGS := -Wall -Wextra
 CPPFLAGS := -I$(INC_DIR) -MMD -MP
+
+ifeq ($(MODE),debug)
+	LDFLAGS += -fsanitize=address
+	CFLAGS += -O0 -DDEBUG -g3
+else
+	CFLAGS += -O2
+endif
 
 $(BUILD_DIR)/$(BIN): $(OBJS)
 	$(CC) $(OBJS) -o $@ $(LDFLAGS)
@@ -20,7 +26,7 @@ $(BUILD_DIR)/%.c.o: %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -r $(BUILD_DIR)
+	rm -rf $(BUILD_DIR)
 
 .PHONY: clean
 
