@@ -75,6 +75,10 @@ initVM(void)
 {
     resetStack();
 
+    vm.bytes_allocated = 0;
+    vm.next_gc = 1024 * 1024;
+    vm.objects = NULL;
+
     vm.gray_count = 0;
     vm.gray_capacity = 0;
     vm.gray_stack = NULL;
@@ -84,10 +88,6 @@ initVM(void)
 
     vm.init_string = NULL;
     vm.init_string = copyString("init", 4);
-
-    vm.bytes_allocated = 0;
-    vm.next_gc = 1024 * 1024;
-    vm.objects = NULL;
 
     defineNative("clock", clockNative, 0);
 }
