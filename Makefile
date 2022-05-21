@@ -1,8 +1,10 @@
 BIN := clox
+TEST_BIN := test
 
 BUILD_DIR := ./build
 SRC_DIR := ./src
 INC_DIR := ./include
+TEST_DIR := ./test
 
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
@@ -31,6 +33,12 @@ clean:
 install: $(BUILD_DIR)/$(BIN)
 	install -m755 $(BUILD_DIR)/$(BIN) /usr/local/bin
 
-.PHONY: clean install
+$(BUILD_DIR)/$(TEST_BIN): $(TEST_DIR)/test.c
+	$(CC) $< -o $@
+
+test: $(BUILD_DIR)/$(BIN) $(BUILD_DIR)/$(TEST_BIN)
+	$(BUILD_DIR)/$(TEST_BIN) $(BUILD_DIR)/$(BIN) $(TEST_DIR)/
+
+.PHONY: clean install test
 
 -include $(DEPS)
