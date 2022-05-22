@@ -3,3 +3,6 @@ print 1 + 2 * 3;  // expect: 7
 print 3 - 2 - 1;  // expect: 0
 print 1 + 2 * 3 - 4 / -5; // expect: 7.8
 print 4 - 3 * -2; // expect: 10
+print 5 % 2 * 3; // expect: 3
+print 13 * 2 % 3; // expect: 2
+print 15 + 2 % 3; // expect: 17

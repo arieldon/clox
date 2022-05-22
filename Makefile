@@ -10,6 +10,7 @@ SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
 DEPS := $(OBJS:.o=.d)
 
+LDFLAGS += -lm
 CFLAGS := -Wall -Wextra
 CPPFLAGS := -I$(INC_DIR) -MMD -MP
 

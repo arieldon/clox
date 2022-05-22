@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -469,6 +470,18 @@ run(void)
             case OP_SUBTRACT: BINARY_OP(NUMBER_VAL, -); break;
             case OP_MULTIPLY: BINARY_OP(NUMBER_VAL, *); break;
             case OP_DIVIDE:   BINARY_OP(NUMBER_VAL, /); break;
+            case OP_MODULO: {
+                if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {
+                    runtimeError("operands must be numbers");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                // Because Lox represents all numbers as doubles, modulo
+                // operations require fmod(). a % b only supports integers.
+                double b = AS_NUMBER(pop());
+                double a = AS_NUMBER(pop());
+                push(NUMBER_VAL(fmod(a, b)));
+                break;
+            }
             case OP_NOT:      push(BOOL_VAL(isFalsey(pop()))); break;
             case OP_NEGATE: {
                 if (!IS_NUMBER(peek(0))) {
